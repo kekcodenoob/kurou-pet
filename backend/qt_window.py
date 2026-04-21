@@ -22,7 +22,7 @@ class DesktopPet(QLabel):
 
         # Pet window setup
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground) # Allows true alpha transparency
+        self.setAttribute(Qt.WA_TranslucentBackground) # Allows transparency
 
         # Variables
         self.is_dragging = False

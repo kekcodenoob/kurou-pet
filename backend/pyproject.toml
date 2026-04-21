@@ -10,6 +10,7 @@ dependencies = [
     "pillow>=12.1.1",
     "pyqt5>=5.15.11",
     "pywin32>=311",
+    "pywinctl>=0.4.1",
 ]
 [tool.uv]
 required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]

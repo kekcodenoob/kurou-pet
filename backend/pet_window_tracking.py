@@ -1,5 +1,6 @@
 import sys
 import random
+import pywinctl as pwc
 import win32gui
 import win32api
 import win32con
@@ -31,11 +32,12 @@ def distraction_hunter(hwnd, ctx):
     
     game_title = ["- Steam", "Version", "Launcher","v1.0", "Early Access", "Alpha", "Beta", "Made with Unity", "Unreal Engine", "CryEngine"]
     game_class = ["UnityWndClass", "UnrealWindow", "GodotEngine", "Valve001", "Direct3DWindowClass", "USetupWindowClass", "YYGameMakerYY", "GAMINGSERVICESUI_HOSTING_WINDOW_CLASS","Battle.net Desktop App", "RGSS Player", "DirectDraw", "Direct3D", "LWJGL", "OgreGLWindow", "SDL_app", "GLFW30", "AppWindowClass"]
-    social_title = ["Facebook", "Twitter", "Instagram", "Reddit", "YouTube", "TikTok", "Twitch", "Pinterest", "LinkedIn"]
+    social_title = ["Facebook", "Twitter", "Instagram", "Reddit", "YouTube", "TikTok", "Twitch", "Pinterest"]
     
     if win32gui.IsWindowVisible(hwnd) and window_title:
         is_game = (window_class in game_class or any(keyword in window_title for keyword in game_title))
         is_social_media = (any(keyword in window_title for keyword in social_title))
+        #print(f"Window: {window_title} Class: {window_class}")
         
         if is_game or is_social_media:
             ctx.append(window_title) # Add to our found distractions list
@@ -49,6 +51,7 @@ class SpeechBubble(QLabel):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setText(text)
         self.setStyleSheet(f"color: {color}; font-family: '{font_family}'; font-size: {font_size}px; font-weight: bold;")
+        self.setFixedSize(self.sizeHint())
         self.move(int(x), int(y))
         self.show()
 
@@ -94,7 +97,7 @@ class DesktopPet(QLabel):
     def load_image(self):
         pet_width = 235
         pet_height = 235
-        pixmap = QPixmap(r"C:\Users\retal\OneDrive\Pictures\roach.webp")
+        pixmap = QPixmap(r"roach.webp")
         
         if not pixmap.isNull(): 
             self.pixmap = pixmap.scaled(pet_width, pet_height, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
@@ -108,7 +111,7 @@ class DesktopPet(QLabel):
             painter.end()
 
         self.setPixmap(self.pixmap)
-        self.resize(self.pixmap.width(), self.pixmap.height())
+        self.setFixedSize(self.pixmap.width(), self.pixmap.height())
         self.setMask(self.pixmap.mask())
 
     # Same distraction hunter as OG window tracking
@@ -168,7 +171,7 @@ class DesktopPet(QLabel):
             if pet_right > whole_screen.right() or self.x() < whole_screen.left() or pet_bottom > screen_bottom + 30:
                 self.move(whole_screen.right() - self.width(), screen_bottom - self.height())
 
-    def idle_walk(self): # TBD: Random chatter while chilling on your screen
+    def idle_walk(self): # TBD: Random chatter while chilling on screen
         screen_geom = QApplication.desktop().availableGeometry(self)
         
         if not self.is_dragging and not self.is_annoyed and self.y() + self.height() >= screen_geom.bottom():
@@ -250,7 +253,7 @@ class DesktopPet(QLabel):
         menu = QMenu(self)
         pet_action = QAction("Pet", self)
         pet_action.triggered.connect(self.show_thanks)
-        kill_action = QAction("Kill pet :(", self)
+        kill_action = QAction("Kill pet >:)", self)
         kill_action.triggered.connect(qApp.quit)
         menu.addAction(pet_action)
         menu.addAction(kill_action)
