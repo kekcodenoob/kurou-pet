@@ -12,5 +12,3 @@ dependencies = [
     "pywin32>=311",
     "pywinctl>=0.4.1",
 ]
-[tool.uv]
-required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]
