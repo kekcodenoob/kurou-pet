@@ -1,6 +1,33 @@
-def main():
-    print("Hello from backend!")
+import sys
+import threading
+import uvicorn
+from PyQt5.QtWidgets import QApplication
+from fastapi import FastAPI
+from pet_window_tracking import DesktopPet, pet_status
 
+# 1. Define your FastAPI app
+api_app = FastAPI()
+
+@api_app.get("/")
+def index():
+    return {"nu": pet_status.get_anger_count()}
+
+# run_fastapi and the threading.Thread parts are from an LLM, not entirely sure how they work but cool that it does
+# 2. Create a wrapper function to run the Uvicorn server
+def run_fastapi():
+    # uvicorn.run blocks the thread it is called in
+    uvicorn.run(api_app, host="127.0.0.1", port=8000)
+
+def main():
+    # 3. Spin up the FastAPI server in a background thread
+    # daemon=True ensures the server closes when you close the Desktop Pet
+    api_thread = threading.Thread(target=run_fastapi, daemon=True)
+    api_thread.start()
+
+    # 4. Run the PyQt5 application on the main thread
+    app = QApplication(sys.argv)
+    pet = DesktopPet(productivity_app="Firefox Nightly")
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()

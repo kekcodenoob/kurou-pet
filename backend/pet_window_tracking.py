@@ -9,6 +9,17 @@ from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 
+# Getting info from the pet to display on the FastAPI server
+class PetStatus:
+    def __init__(self):
+        self.anger_count = 0
+    def increment_anger(self):
+        self.anger_count += 1
+    def get_anger_count(self):
+        return self.anger_count
+    
+pet_status = PetStatus()
+
 # Window tracking stuff
 def focus_keeper(pop_up_window):
     # Brings intended window to foreground if possible
@@ -122,6 +133,7 @@ class DesktopPet(QLabel):
         if found_distractions:
             print(f"Active distractions: {found_distractions}")
             self.trigger_punishment()
+            pet_status.increment_anger() # Increase anger count when distractions are open
         else:
             self.stop_punishment()
 
@@ -222,8 +234,8 @@ class DesktopPet(QLabel):
             bubble = SpeechBubble(
                 text=random.choice(speech_options),
                 color=random.choice(color_options),
-                x=center_x + random.randint(-50, 50),
-                y=self.y() - random.randint(100, 160),
+                x=center_x + random.randint(-100, 10),
+                y=self.y() - random.randint(50, 150),
                 font_family="Comic Sans MS",
                 font_size=20
             )
@@ -263,18 +275,19 @@ class DesktopPet(QLabel):
         if not self.is_punishing:
             color_options = ["orange", "purple", "blue", "pink"]
             center_x = self.x() + (self.width() / 2)
+            thanks_options = ["Thank you for the kind gesture, master.", "Much appreciated.", "Ah, that felt amazing. :)", "Once more, please."]
             thanks_speech = SpeechBubble(
-                text="Thank you for the kind gesture, master.",
+                text=random.choice(thanks_options),
                 color=random.choice(color_options),
-                x=center_x - 150,
-                y=self.y() - random.randint(100, 160),
+                x=center_x - random.randint(100, 200),
+                y=self.y() - random.randint(100, 200),
                 font_family="Comic Sans MS",
                 font_size=20
             )
             self.active_bubbles.append(thanks_speech)
             QTimer.singleShot(3000, thanks_speech.deleteLater)
 
-if __name__ == "__main__":
+def spawn_pet():
     app = QApplication(sys.argv)
     pet = DesktopPet(productivity_app="Firefox Nightly")
     sys.exit(app.exec_())
