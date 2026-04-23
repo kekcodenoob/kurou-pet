@@ -11,11 +11,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Initialize Mediapipe FaceMesh and drawing utilities
-# mp_face_mesh = mp.solutions.face_mesh
-# mp_drawing = mp.solutions.drawing_utils
-# mp_drawing_styles = mp.solutions.drawing_styles
-
 #building the landmark 
 BaseOptions = mp.tasks.BaseOptions
 FaceLandmarker = mp.tasks.vision.FaceLandmarker
@@ -23,15 +18,12 @@ FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
 FaceLandmarkerResult = mp.tasks.vision.FaceLandmarkerResult
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-#creates instance with live stream mode and sets the callback function to print the result
-
-#---------------DEFINE FUNCTIONS----------------
-
 
 class FaceTracker:
     latest_result = None
     score = 100
     blink_time = None
+    isBlink = False
 
     def start(self):
         print("hi")
@@ -80,9 +72,10 @@ class FaceTracker:
             cv2.destroyAllWindows()
     
     def result_callback(self, result, output_image, timestamp_ms):
-        
+
         self.latest_result = result
 
+    #styles the model
     def draw_landmarks_on_image(self, image, detection_result):
 
         if not detection_result or not detection_result.face_landmarks:
@@ -125,10 +118,10 @@ class FaceTracker:
 
         return annotated_image
 
-
+    
     def plot_face_blendshapes_bar_graph(self, face_blendshapes):
 
-        
+        #creates a dictionary for face blenshape
         scores = {c.category_name: c.score for c in face_blendshapes}
         
         look_right_score = scores.get("eyeLookInLeft", -1)
@@ -148,35 +141,34 @@ class FaceTracker:
         #look_up_left & look_up_right > 0.18
 
 
-        # if look_right_score > 0.5 or look_left_score > 0.5 or look_up_left_score > 0.18 or look_up_right_score > 0.18 or blink_left_score > 0.25 or blink_right_score > 0.25:
+        if look_right_score > 0.5 or look_left_score > 0.5 or look_up_left_score > 0.1 or look_up_right_score > 0.1 or self.isBlink:
             
-        # # if (look_down_right or look_left or look_down_left or look_down_right or look_up_left or look_up_right) and category.score > 0.65:
+        # if (look_down_right or look_left or look_down_left or look_down_right or look_up_left or look_up_right) and category.score > 0.65:
         #     # print(f"{category.category_name} score: {category.score}")
         #     # is_forward = Falseß
         #     #print(f"score: {category.score}")
         #     #print(f"LOOK FORWARD")
-
-        #     self.score = max(0, self.score - 0.001)
+            self.score = max(0, self.score - 0.01)
         
-        # else:
-        #     #print(f" ")
-        #     self.score = min(100, self.score + 0.01)
-
-        # print(f"score: {self.score:.2f}")
-            
-        #checks if blink is detected and compares if it has been for 2+ seconds -> prints that you have   
-        if blink_left_score > 0.2:
-            if self.blink_time is None:
-                self.blink_time = time.time()
-            elif time.time() - self.blink_time >= 2:
-                print("youve been blinking for 2 seconds!")
         else:
-            self.blink_time = None        
+        #     #print(f" ")
+            self.score = min(100, self.score + 0.2)
 
+        print(f"score: {self.score:.2f}")
+            
+        #checks if blink is detected and compares if it has been for 2+ seconds   
+        if blink_left_score > 0.3 and blink_right_score > 0.3:
+            if self.blink_time is None: #when its the first time checking
+                self.blink_time = time.time() #saves the current time to blink_time
+            elif time.time() - self.blink_time >= 2:
+                print("youve been looking away for 3 seconds!")
+                self.isBlink = True
 
-        # if category.category_name == "eyeLookInLeft" and category.score > 0.001:
-        #     print(f"jaw open score: {category.score}")
-
+        else:
+            self.blink_time = None   
+            print(":)") 
+            self.isBlink = False    
+    
 
 
     print("FaceLandmarker detector initialized successfully.")
