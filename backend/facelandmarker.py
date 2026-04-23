@@ -125,8 +125,8 @@ def plot_face_blendshapes_bar_graph(face_blendshapes):
         look_up_left_score = scores.get("eyeLookUpLeft", -1)
         look_up_right_score = scores.get("eyeLookUpRight", -1)
 
-        eye_blink_left_score = scores.get("eyeBlinkLeft", -1)
-        eye_blink_right_score = scores.get("eyeBlinkRight", -1)
+        blink_left_score = scores.get("eyeBlinkLeft", -1)
+        blink_right_score = scores.get("eyeBlinkRight", -1)
 
 
     #look_right > 0.5
@@ -140,15 +140,36 @@ def plot_face_blendshapes_bar_graph(face_blendshapes):
 
         global score
 
-        if look_right_score > 0.5 or look_left_score > 0.5 or look_up_left_score > 0.18 or look_up_right_score > 0.18 or (look_down_left_score > 0.6) or (look_down_right_score > 0.6) or look_up_right_score > 0.65:
+        blink_time = None
+
+        if look_right_score > 0.5 or look_left_score > 0.5 or look_up_left_score > 0.18 or look_up_right_score > 0.18 or blink_left_score > 0.25 or blink_right_score > 0.25:
+            
         # if (look_down_right or look_left or look_down_left or look_down_right or look_up_left or look_up_right) and category.score > 0.65:
             # print(f"{category.category_name} score: {category.score}")
             # is_forward = Falseß
             #print(f"score: {category.score}")
-            print(f"LOOK FORWARD")
+            #print(f"LOOK FORWARD")
+
+            score = max(0, score - 0.001)
         
         else:
-            print(f" ")
+            #print(f" ")
+            score = min(100, score + 0.01)
+
+        #print(f"score: {score:.2f}")
+        
+        
+        # if blink_left_score > 0.2:
+        #      if blink_time is None:
+        #          blink_time = time.time()
+        #      elif time.time() - blink_time >= 2:
+        #          print(f"score {blink_left_score}")
+
+
+        #if blink_left_score > 0.08:
+        #if category.category_name == "eyeBlinkLeft" and category.score > 0.2:
+    #     print(f"mouth close score: {category.score}")
+        #print(f"score: {category.score}")
 
         #     score -= 1
         # else:
