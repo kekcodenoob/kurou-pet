@@ -7,6 +7,52 @@ import numpy as np
 model = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
 movenet = model.signatures['serving_default']
 
+# MoveNet keypoint indices for the arms.
+LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST = 5, 7, 9
+RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST = 6, 8, 10
+
+# Push-up state-machine thresholds (elbow angle, degrees).
+# Hysteresis: angle must drop below DOWN_ANGLE to enter "down",
+# then rise above UP_ANGLE to count a rep. The gap prevents noisy flicker.
+DOWN_ANGLE = 90
+UP_ANGLE = 160
+
+# Minimum per-keypoint confidence required to trust an arm's angle.
+ARM_CONF_THRESHOLD = 0.3
+
+
+def compute_angle(a, b, c):
+    """Angle at vertex b (in degrees) formed by points a-b-c."""
+    ba = a - b
+    bc = c - b
+    cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-8)
+    cos_angle = np.clip(cos_angle, -1.0, 1.0)
+    return float(np.degrees(np.arccos(cos_angle)))
+
+
+def arm_angle(keypoints, shoulder_i, elbow_i, wrist_i):
+    """Return (elbow_angle, min_confidence) for one arm, or (None, 0) if unusable."""
+    s, e, w = keypoints[shoulder_i], keypoints[elbow_i], keypoints[wrist_i]
+    min_conf = float(min(s[2], e[2], w[2]))
+    if min_conf < ARM_CONF_THRESHOLD:
+        return None, min_conf
+    # Keypoints are (y, x, conf); use just (y, x) for angle math.
+    return compute_angle(s[:2], e[:2], w[:2]), min_conf
+
+
+def best_elbow_angle(keypoints):
+    """Return the elbow angle from whichever arm has higher-confidence keypoints."""
+    left, left_conf = arm_angle(keypoints, LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST)
+    right, right_conf = arm_angle(keypoints, RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST)
+    if left is None and right is None:
+        return None
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return left if left_conf >= right_conf else right
+
+
 def draw_keypoints(frame, keypoints, confidence_threshold=0.2):
     y, x, c = frame.shape
     shaped = np.multiply(keypoints, [y, x, 1])
