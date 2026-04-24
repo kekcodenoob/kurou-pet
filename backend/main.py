@@ -10,7 +10,11 @@ api_app = FastAPI()
 
 @api_app.get("/")
 def index():
-    return {"nu": pet_status.get_anger_count()}
+    return {"Total happiness points": pet_status.get_happiness_points(),
+            "Source of happiness": pet_status.happiness_causes,
+            "Total anger count": pet_status.get_anger_count(),
+            "Source of anger": pet_status.anger_causes
+            }
 
 # run_fastapi and the threading.Thread parts are from an LLM, not entirely sure how they work but cool that it does
 # 2. Create a wrapper function to run the Uvicorn server

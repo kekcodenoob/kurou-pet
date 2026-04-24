@@ -1,5 +1,6 @@
 import sys
 import random
+import time
 import pywinctl as pwc
 from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp
 from PyQt5.QtCore import Qt, QTimer, QPoint
@@ -8,11 +9,35 @@ from PyQt5.QtGui import QPixmap, QPainter, QColor
 # Getting info from the pet to display on the FastAPI server
 class PetStatus:
     def __init__(self):
+        self.happiness_points = 0
+        self.happiness_causes = {}
         self.anger_count = 0
+        self.anger_causes = {}
+        # self.begin_time = time.time() TBD: Get details like how long the pet has been around or how far it has moved
     def increment_anger(self):
+        self.happiness_points -= 1
         self.anger_count += 1
+    def decrement_anger(self):
+        self.happiness_points += 1
+        self.anger_count -= 1
     def get_anger_count(self):
         return self.anger_count
+    def get_happiness_points(self):
+        return self.happiness_points
+    def find_happiness_causes(self, joy_source):
+        for joy in joy_source:
+            if joy in self.happiness_causes:
+                self.happiness_causes[joy] += 1
+            else:
+                self.happiness_causes[joy] = 1
+        return self.happiness_causes
+    def find_anger_causes(self, found_distractions):
+        for app in found_distractions:
+            if app in self.anger_causes:
+                self.anger_causes[app] += 1
+            else:
+                self.anger_causes[app] = 1
+        return self.anger_causes
     
 pet_status = PetStatus()
 
@@ -45,6 +70,8 @@ def get_active_distractions():
         "Made with Unity",
         "Unreal Engine",
         "CryEngine",
+        "DEMO",
+        "Loading Bay",
     ]
     social_title = [
         "Facebook",
@@ -74,7 +101,6 @@ def get_active_distractions():
             found_distractions.append(title)
     return found_distractions
 
-
 # Desktop pet related classes
 class SpeechBubble(QLabel):
     def __init__(self, text, color, x, y, font_family, font_size):
@@ -88,7 +114,6 @@ class SpeechBubble(QLabel):
         self.setFixedSize(self.sizeHint())
         self.move(int(x), int(y))
         self.show()
-
 
 class DesktopPet(QLabel):
     def __init__(self, productivity_app="Firefox Nightly"):  # Subject to change ofc :P
@@ -165,6 +190,7 @@ class DesktopPet(QLabel):
 
         if found_distractions:
             print(f"Active distractions: {found_distractions}")
+            pet_status.find_anger_causes(found_distractions) # Track name of distractions for server reporting
             self.trigger_punishment()
             pet_status.increment_anger() # Increase anger count when distractions are open
         else:
@@ -295,11 +321,13 @@ class DesktopPet(QLabel):
             annoyed_speech = SpeechBubble(
                 text="OK THAT'S ENOUGH NOW!!",
                 color="red",
-                x=center_x - 180,
+                x=center_x - 200,
                 y=self.y() - 100,
                 font_family="Times New Roman",
                 font_size=35,
             )
+            pet_status.find_anger_causes(["Tapping the pet too much!!"]) # The annoyed speech seemed irrelevant, made it more impactful
+            pet_status.increment_anger()
             self.active_bubbles.append(annoyed_speech)
 
             def not_annoyed():
@@ -332,6 +360,8 @@ class DesktopPet(QLabel):
                 font_family="Comic Sans MS",
                 font_size=20,
             )
+            pet_status.find_happiness_causes(["Pet the pet"])
+            pet_status.decrement_anger() # Reduce anger count for each sign of affection
             self.active_bubbles.append(thanks_speech)
             QTimer.singleShot(3000, thanks_speech.deleteLater)
 
