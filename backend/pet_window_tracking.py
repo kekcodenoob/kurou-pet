@@ -1,6 +1,8 @@
 import sys
 import random
 import time
+import pyautogui
+import platform
 import pywinctl as pwc
 from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp
 from PyQt5.QtCore import Qt, QTimer, QPoint
@@ -51,7 +53,9 @@ pet_status = PetStatus()
 
 # Window tracking stuff
 def focus_keeper(target_title):
-    # Brings intended window to foreground if possible.
+    # Brings intended window to foreground if possible
+    if platform.system() == "Windows":
+        pyautogui.press("alt")
     try:
         windows = pwc.getWindowsWithTitle(target_title)
         if windows:
@@ -127,7 +131,7 @@ class SpeechBubble(QLabel):
 class DesktopPet(QLabel):
     def __init__(self, productivity_app="Firefox Nightly"):  # Subject to change ofc :P
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.X11BypassWindowManagerHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         # Variables
