@@ -10,10 +10,11 @@ api_app = FastAPI()
 
 @api_app.get("/")
 def index():
-    return {"Total happiness points": pet_status.get_happiness_points(),
-            "Source of happiness": pet_status.happiness_causes,
-            "Total anger count": pet_status.get_anger_count(),
-            "Source of anger": pet_status.anger_causes
+    return {"total_affection_points": pet_status.get_affection_points(),
+            "total_happiness_count": pet_status.get_happiness_count(),
+            "source_of_happiness": pet_status.happiness_causes,
+            "total_anger_count": pet_status.get_anger_count(),
+            "source_of_anger": pet_status.anger_causes
             }
 
 # run_fastapi and the threading.Thread parts are from an LLM, not entirely sure how they work but cool that it does

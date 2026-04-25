@@ -6,26 +6,33 @@ from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 
+class AngerSource:
+    name: str
+    seconds: int
+
 # Getting info from the pet to display on the FastAPI server
 class PetStatus:
     def __init__(self):
-        self.happiness_points = 0
+        self.affection_points = 0
+        self.happiness_count = 0
         self.happiness_causes = {}
         self.anger_count = 0
         self.anger_causes = {}
         # self.begin_time = time.time() TBD: Get details like how long the pet has been around or how far it has moved
     def increment_anger(self):
-        self.happiness_points -= 1
+        self.affection_points -= 1
         self.anger_count += 1
-    def decrement_anger(self):
-        self.happiness_points += 1
-        self.anger_count -= 1
+    def increment_happiness(self):
+        self.affection_points += 1
+        self.happiness_count += 1
+    def get_affection_points(self):
+        return self.affection_points
     def get_anger_count(self):
         return self.anger_count
-    def get_happiness_points(self):
-        return self.happiness_points
-    def find_happiness_causes(self, joy_source):
-        for joy in joy_source:
+    def get_happiness_count(self):
+        return self.happiness_count
+    def find_happiness_causes(self, happiness_source):
+        for joy in happiness_source:
             if joy in self.happiness_causes:
                 self.happiness_causes[joy] += 1
             else:
@@ -33,10 +40,11 @@ class PetStatus:
         return self.happiness_causes
     def find_anger_causes(self, found_distractions):
         for app in found_distractions:
-            if app in self.anger_causes:
-                self.anger_causes[app] += 1
+            snakecase_app = app.strip().lower().replace(" ", "_")
+            if snakecase_app in self.anger_causes:
+                self.anger_causes[snakecase_app] += 1
             else:
-                self.anger_causes[app] = 1
+                self.anger_causes[snakecase_app] = 1
         return self.anger_causes
     
 pet_status = PetStatus()
@@ -72,6 +80,7 @@ def get_active_distractions():
         "CryEngine",
         "DEMO",
         "Loading Bay",
+        "DELTARUNE"
     ]
     social_title = [
         "Facebook",
@@ -186,6 +195,8 @@ class DesktopPet(QLabel):
 
     # Same distraction hunter as OG window tracking
     def scan_for_distractions(self):
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint) # Pet always stays on top even with forced-fullscreen games (like DELTARUNE)
+        self.show()
         found_distractions = get_active_distractions()
 
         if found_distractions:
@@ -206,7 +217,7 @@ class DesktopPet(QLabel):
             self.punish_bubble = SpeechBubble(
                 text="GET BACK ON THE GRIND!!!",
                 color="red",
-                x=center_x - 180,
+                x=center_x - 100,
                 y=self.y() - 100,
                 font_family="Times New Roman",
                 font_size=35,
@@ -321,12 +332,12 @@ class DesktopPet(QLabel):
             annoyed_speech = SpeechBubble(
                 text="OK THAT'S ENOUGH NOW!!",
                 color="red",
-                x=center_x - 200,
+                x=center_x - 240,
                 y=self.y() - 100,
                 font_family="Times New Roman",
                 font_size=35,
             )
-            pet_status.find_anger_causes(["Tapping the pet too much!!"]) # The annoyed speech seemed irrelevant, made it more impactful
+            pet_status.find_anger_causes(["too_many_taps"]) # The annoyed speech seemed irrelevant, made it more impactful
             pet_status.increment_anger()
             self.active_bubbles.append(annoyed_speech)
 
@@ -360,8 +371,8 @@ class DesktopPet(QLabel):
                 font_family="Comic Sans MS",
                 font_size=20,
             )
-            pet_status.find_happiness_causes(["Pet the pet"])
-            pet_status.decrement_anger() # Reduce anger count for each sign of affection
+            pet_status.find_happiness_causes(["pet_the_pet"])
+            pet_status.increment_happiness() # Reduce anger count for each sign of affection
             self.active_bubbles.append(thanks_speech)
             QTimer.singleShot(3000, thanks_speech.deleteLater)
 
