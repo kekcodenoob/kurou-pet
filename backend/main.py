@@ -1,7 +1,6 @@
 import sys
 import threading
 import uvicorn
-from PyQt5.QtWidgets import QApplication
 from fastapi import FastAPI
 from pet_window_tracking import DesktopPet, pet_status
 
@@ -28,11 +27,6 @@ def main():
     # daemon=True ensures the server closes when you close the Desktop Pet
     api_thread = threading.Thread(target=run_fastapi, daemon=True)
     api_thread.start()
-
-    # 4. Run the PyQt5 application on the main thread
-    app = QApplication(sys.argv)
-    pet = DesktopPet(productivity_app="Firefox Nightly")
-    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()

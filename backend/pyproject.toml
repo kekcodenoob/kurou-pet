@@ -10,7 +10,6 @@ dependencies = [
     "opencv-python>=4.13.0.92",
     "pillow>=12.1.1",
     "pyqt5>=5.15.11",
-    "pywin32>=311",
     "pywinctl>=0.4.1",
 ]
 [tool.uv]
