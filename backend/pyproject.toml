@@ -1,17 +1,22 @@
 [project]
-name = "backend"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.136.1",
     "numpy>=2.4.3",
     "opencv-python>=4.13.0.92",
     "pillow>=12.1.1",
     "pyqt5>=5.15.11",
+    "mediapipe",
+    "opencv-python",
     "pywin32>=311",
     "pywinctl>=0.4.1",
 ]
+description = "Add your description here"
+name = "backend"
+readme = "README.md"
+requires-python = ">=3.13"
+version = "0.1.0"
+
 [tool.uv]
-required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64'"]
+required-environments = [
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+]

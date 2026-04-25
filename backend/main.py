@@ -1,38 +1,39 @@
-import sys
 import threading
 import uvicorn
-from PyQt5.QtWidgets import QApplication
 from fastapi import FastAPI
-from pet_window_tracking import DesktopPet, pet_status
+from pet_window_tracking import pet_status, spawn_pet
+from facelandmarker import FaceTracker
 
-# 1. Define your FastAPI app
-api_app = FastAPI()
+app = FastAPI()
+face_tracker = FaceTracker()
 
-@api_app.get("/")
+
+@app.get("/")
 def index():
-    return {"total_affection_points": pet_status.get_affection_points(),
-            "total_happiness_count": pet_status.get_happiness_count(),
-            "source_of_happiness": pet_status.happiness_causes,
-            "total_anger_count": pet_status.get_anger_count(),
-            "source_of_anger": pet_status.anger_causes
-            }
+    return {
+        "total_affection_points": pet_status.get_affection_points(),
+        "total_happiness_count": pet_status.get_happiness_count(),
+        "source_of_happiness": pet_status.happiness_causes,
+        "total_anger_count": pet_status.get_anger_count(),
+        "source_of_anger": pet_status.anger_causes,
+    }
 
-# run_fastapi and the threading.Thread parts are from an LLM, not entirely sure how they work but cool that it does
-# 2. Create a wrapper function to run the Uvicorn server
-def run_fastapi():
-    # uvicorn.run blocks the thread it is called in
-    uvicorn.run(api_app, host="127.0.0.1", port=8000)
+
+@app.get("/score")
+def get_score():
+    return {"score": face_tracker.get_score()}
+
 
 def main():
-    # 3. Spin up the FastAPI server in a background thread
     # daemon=True ensures the server closes when you close the Desktop Pet
-    api_thread = threading.Thread(target=run_fastapi, daemon=True)
-    api_thread.start()
+    pet_thread = threading.Thread(target=spawn_pet, daemon=True)
+    pet_thread.start()
 
-    # 4. Run the PyQt5 application on the main thread
-    app = QApplication(sys.argv)
-    pet = DesktopPet(productivity_app="Firefox Nightly")
-    sys.exit(app.exec_())
+    tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
+    tracker_thread.start()
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+
 
 if __name__ == "__main__":
     main()
