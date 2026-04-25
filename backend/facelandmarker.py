@@ -21,7 +21,7 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 
 class FaceTracker:
     latest_result = None
-    score = 100
+    score = 100.0
     blink_time = None
     isBlink = False
 
