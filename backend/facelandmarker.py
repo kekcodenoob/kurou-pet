@@ -26,7 +26,6 @@ class FaceTracker:
     isBlink = False
 
     def start(self):
-        print("hi")
         #Creates a FaceLandermarker Object
         options = FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_path="face_landmarker.task"),
@@ -121,7 +120,7 @@ class FaceTracker:
     
     def plot_face_blendshapes_bar_graph(self, face_blendshapes):
 
-        #creates a dictionary for face blenshape
+        #creates a dictionary for face blendshape
         scores = {c.category_name: c.score for c in face_blendshapes}
         
         look_right_score = scores.get("eyeLookInLeft", -1)
@@ -170,8 +169,11 @@ class FaceTracker:
             self.isBlink = False    
     
 
+    def getScore(self):
+        return self.score
+    
 
-    print("FaceLandmarker detector initialized successfully.")
+    # print("FaceLandmarker detector initialized successfully.")
 
-face_tracker = FaceTracker()
-face_tracker.start()        
+# face_tracker = FaceTracker()
+# face_tracker.start()        
