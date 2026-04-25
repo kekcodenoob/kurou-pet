@@ -169,7 +169,7 @@ class FaceTracker:
             self.isBlink = False    
     
 
-    def getScore(self):
+    def get_score(self):
         return self.score
     
 
