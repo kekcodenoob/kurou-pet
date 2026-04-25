@@ -2,7 +2,7 @@ import sys
 import threading
 import uvicorn
 from fastapi import FastAPI
-from pet_window_tracking import DesktopPet, pet_status
+from pet_window_tracking import spawn_pet, pet_status
 
 # 1. Define your FastAPI app
 api_app = FastAPI()
@@ -27,6 +27,7 @@ def main():
     # daemon=True ensures the server closes when you close the Desktop Pet
     api_thread = threading.Thread(target=run_fastapi, daemon=True)
     api_thread.start()
-
+    spawn_pet()
+    
 if __name__ == "__main__":
     main()

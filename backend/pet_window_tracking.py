@@ -54,8 +54,14 @@ pet_status = PetStatus()
 # Window tracking stuff
 def focus_keeper(target_title):
     # Brings intended window to foreground if possible
+    # Forces window pop up with simulated keystrokes across each platform
     if platform.system() == "Windows":
-        pyautogui.press("alt")
+        pyautogui.press("alt") 
+    elif platform.system() == "Darwin": # macOS
+        pyautogui.hotkey('command', 'tab')
+    elif platform.system() == "Linux":
+        pyautogui.hotkey('alt', 'tab')
+
     try:
         windows = pwc.getWindowsWithTitle(target_title)
         if windows:
@@ -118,7 +124,9 @@ def get_active_distractions():
 class SpeechBubble(QLabel):
     def __init__(self, text, color, x, y, font_family, font_size):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        # Speech always on top of monitor
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.X11BypassWindowManagerHint)
+        self.raise_()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setText(text)
         self.setStyleSheet(
@@ -131,6 +139,7 @@ class SpeechBubble(QLabel):
 class DesktopPet(QLabel):
     def __init__(self, productivity_app="Firefox Nightly"):  # Subject to change ofc :P
         super().__init__()
+        # Pet always on top of monitor
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.X11BypassWindowManagerHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
@@ -199,8 +208,10 @@ class DesktopPet(QLabel):
 
     # Same distraction hunter as OG window tracking
     def scan_for_distractions(self):
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint) # Pet always stays on top even with forced-fullscreen games (like DELTARUNE)
+        # Pet always returns on top even with forced-fullscreen games (like DELTARUNE)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         self.show()
+        self.raise_()
         found_distractions = get_active_distractions()
 
         if found_distractions:
