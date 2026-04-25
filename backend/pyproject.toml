@@ -4,11 +4,11 @@ dependencies = [
     "numpy>=2.4.3",
     "opencv-python>=4.13.0.92",
     "pillow>=12.1.1",
+    "pyautogui>=0.9.54",
     "pyqt5>=5.15.11",
     "mediapipe",
     "opencv-python",
     "pywinctl>=0.4.1",
-    "pyautogui>=0.9.54",
 ]
 description = "Add your description here"
 name = "backend"

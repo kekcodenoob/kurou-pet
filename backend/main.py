@@ -1,7 +1,7 @@
 import threading
 import uvicorn
 from fastapi import FastAPI
-from pet_window_tracking import pet_status, spawn_pet
+from pet_window_tracking import spawn_pet, pet_status
 from facelandmarker import FaceTracker
 
 app = FastAPI()
@@ -32,7 +32,7 @@ def main():
     tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
     tracker_thread.start()
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app)
 
 
 if __name__ == "__main__":
