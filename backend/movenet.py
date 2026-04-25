@@ -7,49 +7,50 @@ import numpy as np
 model = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
 movenet = model.signatures['serving_default']
 
-# MoveNet keypoint indices for the arms.
+#indices we need
 LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST = 5, 7, 9
 RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST = 6, 8, 10
 
-# Push-up state-machine thresholds (elbow angle, degrees).
-# Hysteresis: angle must drop below DOWN_ANGLE to enter "down",
-# then rise above UP_ANGLE to count a rep. The gap prevents noisy flicker.
+
 DOWN_ANGLE = 90
 UP_ANGLE = 160
 
-# Minimum per-keypoint confidence required to trust an arm's angle.
+# minimum threshold ofr arms
 ARM_CONF_THRESHOLD = 0.3
 
 
 def compute_angle(a, b, c):
-    """Angle at vertex b (in degrees) formed by points a-b-c."""
     ba = a - b
     bc = c - b
+
     cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-8)
     cos_angle = np.clip(cos_angle, -1.0, 1.0)
-    return float(np.degrees(np.arccos(cos_angle)))
 
+    return float(np.degrees(np.arccos(cos_angle)))
+    
 
 def arm_angle(keypoints, shoulder_i, elbow_i, wrist_i):
-    """Return (elbow_angle, min_confidence) for one arm, or (None, 0) if unusable."""
-    s, e, w = keypoints[shoulder_i], keypoints[elbow_i], keypoints[wrist_i]
-    min_conf = float(min(s[2], e[2], w[2]))
+    shoulder, elbow, wrist = keypoints[shoulder_i], keypoints[elbow_i], keypoints[wrist_i]
+    min_conf = float(min(shoulder[2], elbow[2], wrist[2]))
+
     if min_conf < ARM_CONF_THRESHOLD:
         return None, min_conf
-    # Keypoints are (y, x, conf); use just (y, x) for angle math.
-    return compute_angle(s[:2], e[:2], w[:2]), min_conf
+
+    return compute_angle(shoulder[:2], elbow[:2], wrist[:2]), min_conf # [:2] strips confidence score
 
 
 def best_elbow_angle(keypoints):
-    """Return the elbow angle from whichever arm has higher-confidence keypoints."""
     left, left_conf = arm_angle(keypoints, LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST)
     right, right_conf = arm_angle(keypoints, RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST)
+
+    # logic for getting best arm angle for calculations
     if left is None and right is None:
         return None
     if left is None:
         return right
     if right is None:
         return left
+        
     return left if left_conf >= right_conf else right
 
 
@@ -85,6 +86,9 @@ def main():
     cap = cv2.VideoCapture(0)
     print("MoveNet Lightning Livestreaming Started. Press 'q' to quit.")
 
+    count = 0
+    state = "up" # assumes person starts with arms extended
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -100,9 +104,27 @@ def main():
         # Output is a [1, 1, 17, 3] tensor
         keypoints = outputs['output_0'].numpy()[0, 0, :, :]
 
+        angle = best_elbow_angle(keypoints)
+
+        if angle is not None:
+            if state == "up" and angle < DOWN_ANGLE:
+                state = "down"
+            elif state == "down" and angle > UP_ANGLE:
+                state = "up"
+                count+=1
+            
+        
         # Draw onto the original frame
         draw_connections(frame, keypoints)
         draw_keypoints(frame, keypoints)
+
+        cv2.putText(frame, f"Reps: {count}", (10, 40),
+            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)                                                                                                
+        cv2.putText(frame, f"State: {state}", (10, 80),                                                                                                           
+            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)                                                                                              
+        if angle is not None:                                                                                                                                     
+            cv2.putText(frame, f"Angle: {angle:.1f}", (10, 115),                                                                                                  
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2) 
 
         cv2.imshow('MoveNet Lightning', frame)
 
