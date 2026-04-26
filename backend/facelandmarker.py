@@ -58,11 +58,11 @@ class FaceTracker:
                 h, w = image.shape[:2]  # get dimensions for landmark scaling
 
                 annotated_image = self.draw_landmarks_on_image(image, self.latest_result)
-
+    
                 if self.latest_result and self.latest_result.face_blendshapes:
                     self.plot_face_blendshapes_bar_graph(self.latest_result.face_blendshapes[0])
 
-                cv2.imshow("feed", annotated_image)
+                # cv2.imshow("feed", annotated_image)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break

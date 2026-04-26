@@ -23,16 +23,18 @@ def index():
 def get_score():
     return {"score": face_tracker.get_score()}
 
+def run_server():
+    uvicorn.run(app)
 
 def main():
     # daemon=True ensures the server closes when you close the Desktop Pet
-    pet_thread = threading.Thread(target=spawn_pet, daemon=True)
-    pet_thread.start()
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
 
     tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
     tracker_thread.start()
 
-    uvicorn.run(app)
+    spawn_pet()
 
 
 if __name__ == "__main__":
