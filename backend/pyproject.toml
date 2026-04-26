@@ -4,8 +4,16 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["tensorflow",
+dependencies = [
+    "tensorflow",
     "tensorflow-hub",
-    "opencv-python",
-    "numpy",
-    "setuptools<70"]
+    "opencv-python>=4.13.0.92",
+    "numpy>=2.4.3",
+    "setuptools<70",
+    "fastapi[standard]>=0.136.1",
+    "pillow>=12.1.1",
+    "pyautogui>=0.9.54",
+    "pyqt5>=5.15.11",
+    "mediapipe",
+    "pywinctl>=0.4.1",
+]
