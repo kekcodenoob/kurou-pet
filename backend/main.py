@@ -1,4 +1,3 @@
-from movenet import main as movenet_main
 import threading
 import uvicorn
 from fastapi import FastAPI
@@ -36,8 +35,6 @@ def main():
     tracker_thread.start()
 
     spawn_pet()
-
-    movenet_main()
 
 
 if __name__ == "__main__":
