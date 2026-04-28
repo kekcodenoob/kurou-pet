@@ -1,6 +1,5 @@
 import sys
 import random
-import time
 import pyautogui
 import platform
 import pywinctl as pwc
@@ -19,20 +18,53 @@ class PetStatus:
         self.happiness_count = 0
         self.happiness_causes = {}
         self.anger_count = 0
-        self.anger_causes = {}
-        # self.begin_time = time.time() TBD: Get details like how long the pet has been around or how far it has moved
+        self.anger_causes = {} # Dictionary structure for platform and tabs
+        
     def increment_anger(self):
         self.affection_points -= 1
         self.anger_count += 1
+        
     def increment_happiness(self):
         self.affection_points += 1
         self.happiness_count += 1
+        
     def get_affection_points(self):
         return self.affection_points
+        
     def get_anger_count(self):
         return self.anger_count
+        
+    def find_anger_causes(self, found_distractions, increment_num = 5):
+        # found_distractions now strucutred like (distraction platform, tab title). Ex: "Youtube" : 20 seconds, "Game Playthrough - Youtube": 15 seconds)
+        for platform, title in found_distractions:
+            stripped_app = title.strip()
+            
+            # Storing pet annoyances and new platform distractions (Youtube, Reddit, etc.)
+            if platform not in self.anger_causes:
+                if platform == "Desktop Pet":
+                    self.anger_causes[platform] = {"Excessive taps": 0}
+                else:
+                    self.anger_causes[platform] = {
+                        "Total seconds": 0,
+                        "tabs": {}
+                    }
+            # Added this to track times pet was tapped too much, since that's not a time-based metric
+            if platform == "Desktop Pet":
+                self.anger_causes[platform]["Excessive taps"] += increment_num
+            else:
+                self.anger_causes[platform]["Total seconds"] += increment_num
+
+                # Storing new titles in distractions (ex: DELTARUNE Playthrough - Youtube)
+                if stripped_app not in self.anger_causes[platform]["tabs"]:
+                    self.anger_causes[platform]["tabs"][stripped_app] = 0
+                # Same deal with the platform stuff
+                self.anger_causes[platform]["tabs"][stripped_app] += increment_num
+            
+        return self.anger_causes
+        
     def get_happiness_count(self):
         return self.happiness_count
+        
     def find_happiness_causes(self, happiness_source):
         for joy in happiness_source:
             if joy in self.happiness_causes:
@@ -40,14 +72,7 @@ class PetStatus:
             else:
                 self.happiness_causes[joy] = 1
         return self.happiness_causes
-    def find_anger_causes(self, found_distractions):
-        for app in found_distractions:
-            snakecase_app = app.strip().lower().replace(" ", "_")
-            if snakecase_app in self.anger_causes:
-                self.anger_causes[snakecase_app] += 1
-            else:
-                self.anger_causes[snakecase_app] = 1
-        return self.anger_causes
+
     
 pet_status = PetStatus()
 
@@ -78,7 +103,7 @@ def focus_keeper(target_title):
 def get_active_distractions():
     # Hunts for games/social media by scanning visible window titles.
     game_title = [
-        "- Steam",
+        "Steam",
         "Version",
         "Launcher",
         "v1.0",
@@ -97,6 +122,7 @@ def get_active_distractions():
         "Twitter",
         "Instagram",
         "Reddit",
+        "r/",
         "YouTube",
         "TikTok",
         "Twitch",
@@ -114,10 +140,25 @@ def get_active_distractions():
         if not title:
             continue
         lowered = title.lower()
-        is_game = any(keyword.lower() in lowered for keyword in game_title)
-        is_social = any(keyword.lower() in lowered for keyword in social_title)
-        if is_game or is_social:
-            found_distractions.append(title)
+        
+        # Trying to match tabs to their general platforms 
+        matched_platform = None
+        for keyword in game_title:
+            if keyword.lower() in lowered:
+                matched_platform = keyword
+                break
+        if not matched_platform:
+            for keyword in social_title:
+                if keyword.lower() in lowered:
+                    matched_platform = keyword
+                    break
+        # Add platform and specific window name to distractions. r/ was weird so I replaced its displayed name
+        if matched_platform:
+            if matched_platform == "r/":
+                found_distractions.append(("Reddit", title))
+            else:
+                found_distractions.append((matched_platform, title))
+            
     return found_distractions
 
 # Desktop pet related classes
@@ -215,10 +256,13 @@ class DesktopPet(QLabel):
         found_distractions = get_active_distractions()
 
         if found_distractions:
-            print(f"Active distractions: {found_distractions}")
-            pet_status.find_anger_causes(found_distractions) # Track name of distractions for server reporting
+            # Chose to print only titles since we know the platform from just that :DD
+            titles_only = [item[1] for item in found_distractions]
+            print(f"Active distractions: {titles_only}")
+            
+            pet_status.find_anger_causes(found_distractions) 
             self.trigger_punishment()
-            pet_status.increment_anger() # Increase anger count when distractions are open
+            pet_status.increment_anger() 
         else:
             self.stop_punishment()
 
@@ -352,7 +396,8 @@ class DesktopPet(QLabel):
                 font_family="Times New Roman",
                 font_size=35,
             )
-            pet_status.find_anger_causes(["too_many_taps"]) # The annoyed speech seemed irrelevant, made it more impactful
+            # Formatted pet specific anger causes like the platform/title ones, so I can increment excessive taps by 1
+            pet_status.find_anger_causes([("Desktop Pet", "Too many taps")], increment_num=1) 
             pet_status.increment_anger()
             self.active_bubbles.append(annoyed_speech)
 
@@ -386,7 +431,7 @@ class DesktopPet(QLabel):
                 font_family="Comic Sans MS",
                 font_size=20,
             )
-            pet_status.find_happiness_causes(["pet_the_pet"])
+            pet_status.find_happiness_causes(["Pet the pet"])
             pet_status.increment_happiness() # Reduce anger count for each sign of affection
             self.active_bubbles.append(thanks_speech)
             QTimer.singleShot(3000, thanks_speech.deleteLater)
