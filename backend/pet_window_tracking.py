@@ -104,7 +104,6 @@ def get_active_distractions():
     # Hunts for games/social media by scanning visible window titles.
     game_title = [
         "Steam",
-        "Version",
         "Launcher",
         "v1.0",
         "Early Access",
@@ -145,19 +144,22 @@ def get_active_distractions():
         matched_platform = None
         for keyword in game_title:
             if keyword.lower() in lowered:
-                matched_platform = keyword
+                if keyword == "Launcher":
+                    matched_platform = "Game Launcher"
+                else:
+                    matched_platform = keyword
                 break
         if not matched_platform:
             for keyword in social_title:
                 if keyword.lower() in lowered:
-                    matched_platform = keyword
+                    if keyword == "r/": # r/ was weird so I replaced its displayed name
+                        matched_platform = "Reddit"
+                    else:
+                        matched_platform = keyword
                     break
-        # Add platform and specific window name to distractions. r/ was weird so I replaced its displayed name
+        # Add platform and specific window name to distractions
         if matched_platform:
-            if matched_platform == "r/":
-                found_distractions.append(("Reddit", title))
-            else:
-                found_distractions.append((matched_platform, title))
+            found_distractions.append((matched_platform, title))
             
     return found_distractions
 
