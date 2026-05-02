@@ -4,7 +4,7 @@ An interactive pet prototype built by Team 4 (SP'26).
 
 *a demo video/photo*
 
-# Made by:
+### Made by:
 
 - Kelvin ([@kekcodenoob](https://github.com/kekcodenoob))
 - Vanessa ([@vanessa0135](https://github.com/vanessa0135))
