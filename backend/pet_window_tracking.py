@@ -2,10 +2,56 @@ import sys
 import random
 import pyautogui
 import platform
+import os
+import json
 import pywinctl as pwc
-from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp
+from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp, QWidget, QVBoxLayout, QTextEdit, QPushButton # --- CHANGED: Added UI components ---
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
+
+class PerformanceReviewWindow(QWidget):
+    # Pop-up to display the same stats as in pet_status
+    def __init__(self, status):
+        super().__init__()
+        self.status = status
+        self.setWindowTitle("Pet Performance Review")
+        self.setFixedSize(400, 500)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint) # Keep it above other windows
+        
+        layout = QVBoxLayout()
+        self.text_display = QTextEdit()
+        self.text_display.setReadOnly(True)
+        layout.addWidget(self.text_display)
+        
+        refresh_btn = QPushButton("Refresh Stats")
+        refresh_btn.clicked.connect(self.update_stats)
+        layout.addWidget(refresh_btn)
+        
+        self.setLayout(layout)
+        self.update_stats()
+
+    def update_stats(self):
+        """Formats the data from PetStatus into a readable report."""
+        report = f"--- PET OVERALL STATUS ---\n"
+        report += f"Affection Points: {self.status.get_affection_points()}\n"
+        report += f"Happiness Total: {self.status.get_happiness_count()}\n"
+        report += f"Anger Total: {self.status.get_anger_count()}\n\n"
+        
+        report += "--- SOURCES OF JOY ---\n"
+        for joy, count in self.status.happiness_causes.items():
+            report += f"• {joy}: {count} times\n"
+            
+        report += "\n--- SOURCES OF ANGER ---\n"
+        for platform_name, data in self.status.anger_causes.items():
+            if platform_name == "Desktop Pet":
+                report += f"• {platform_name}: {data.get('Excessive taps', 0)} annoying taps\n"
+            else:
+                report += f"• {platform_name}: {data.get('Total seconds', 0)}s spent distracted\n"
+                for tab, seconds in data.get('Tabs', {}).items():
+                    report += f"   - {tab[:30]}... ({seconds}s)\n"
+        
+        self.text_display.setPlainText(report)
+# --- END NEW CLASS ---
 
 class AngerSource:
     name: str
@@ -13,12 +59,40 @@ class AngerSource:
 
 # Getting info from the pet to display on the FastAPI server
 class PetStatus:
-    def __init__(self):
+    def __init__(self, filename="pet_data.json"):
+        self.filename = filename
         self.affection_points = 0
         self.happiness_count = 0
         self.happiness_causes = {}
         self.anger_count = 0
-        self.anger_causes = {} # Dictionary structure for platform and tabs
+        self.anger_causes = {} 
+        self.load_from_file() # Auto-load on creation
+
+    def save_to_file(self):
+        """Writes current state to JSON."""
+        data = {
+            "affection_points": self.affection_points,
+            "happiness_count": self.happiness_count,
+            "happiness_causes": self.happiness_causes,
+            "anger_count": self.anger_count,
+            "anger_causes": self.anger_causes
+        }
+        with open(self.filename, "w") as f:
+            json.dump(data, f, indent=4)
+
+    def load_from_file(self):
+        """Reads previous state from JSON if it exists."""
+        if os.path.exists(self.filename):
+            try:
+                with open(self.filename, "r") as f:
+                    data = json.load(f)
+                    self.affection_points = data.get("affection_points", 0)
+                    self.happiness_count = data.get("happiness_count", 0)
+                    self.happiness_causes = data.get("happiness_causes", {})
+                    self.anger_count = data.get("anger_count", 0)
+                    self.anger_causes = data.get("anger_causes", {})
+            except Exception as e:
+                print(f"Error loading save file: {e}")
         
     def increment_anger(self):
         self.affection_points -= 1
@@ -36,29 +110,29 @@ class PetStatus:
         
     def find_anger_causes(self, found_distractions, increment_num = 5):
         # found_distractions now strucutred like (distraction platform, tab title). Ex: "Youtube" : 20 seconds, "Game Playthrough - Youtube": 15 seconds)
-        for platform, title in found_distractions:
+        for platform_name, title in found_distractions:
             stripped_app = title.strip()
             
             # Storing pet annoyances and new platform distractions (Youtube, Reddit, etc.)
-            if platform not in self.anger_causes:
-                if platform == "Desktop Pet":
-                    self.anger_causes[platform] = {"Excessive taps": 0}
+            if platform_name not in self.anger_causes:
+                if platform_name == "Desktop Pet":
+                    self.anger_causes[platform_name] = {"Excessive taps": 0}
                 else:
-                    self.anger_causes[platform] = {
+                    self.anger_causes[platform_name] = {
                         "Total seconds": 0,
-                        "tabs": {}
+                        "Tabs": {}
                     }
             # Added this to track times pet was tapped too much, since that's not a time-based metric
-            if platform == "Desktop Pet":
-                self.anger_causes[platform]["Excessive taps"] += increment_num
+            if platform_name == "Desktop Pet":
+                self.anger_causes[platform_name]["Excessive taps"] += increment_num
             else:
-                self.anger_causes[platform]["Total seconds"] += increment_num
+                self.anger_causes[platform_name]["Total seconds"] += increment_num
 
                 # Storing new titles in distractions (ex: DELTARUNE Playthrough - Youtube)
-                if stripped_app not in self.anger_causes[platform]["tabs"]:
-                    self.anger_causes[platform]["tabs"][stripped_app] = 0
+                if stripped_app not in self.anger_causes[platform_name]["Tabs"]:
+                    self.anger_causes[platform_name]["Tabs"][stripped_app] = 0
                 # Same deal with the platform stuff
-                self.anger_causes[platform]["tabs"][stripped_app] += increment_num
+                self.anger_causes[platform_name]["Tabs"][stripped_app] += increment_num
             
         return self.anger_causes
         
@@ -140,7 +214,7 @@ def get_active_distractions():
             continue
         lowered = title.lower()
         
-        # Trying to match tabs to their general platforms 
+        # Trying to match Tabs to their general platforms 
         matched_platform = None
         for keyword in game_title:
             if keyword.lower() in lowered:
@@ -195,6 +269,10 @@ class DesktopPet(QLabel):
         self.is_punishing = False
         self.total_walk_distance = 0
         self.walk_direction = 0
+
+        self.review_window = None 
+        self.is_tracking_work = False
+        self.is_tracking_workout = False
 
         # Image setup
         self.load_image()
@@ -412,13 +490,53 @@ class DesktopPet(QLabel):
 
     def pet_right_click(self, global_pos):
         menu = QMenu(self)
+        
+        # New Performance Review Action
+        review_action = QAction("Performance Review", self)
+        review_action.triggered.connect(self.show_performance_review)
+        menu.addAction(review_action)
+        
+        menu.addSeparator()
+
+        # New Tracking Toggles for Work and Workout
+        work_action = QAction("Track Work Focus", self, checkable=True)
+        work_action.setChecked(self.is_tracking_work)
+        work_action.triggered.connect(lambda: self.toggle_tracking("work"))
+        menu.addAction(work_action)
+
+        workout_action = QAction("Track Workout", self, checkable=True)
+        workout_action.setChecked(self.is_tracking_workout)
+        workout_action.triggered.connect(lambda: self.toggle_tracking("workout"))
+        menu.addAction(workout_action)
+
+        menu.addSeparator()
+
         pet_action = QAction("Pet", self)
         pet_action.triggered.connect(self.show_thanks)
+        menu.addAction(pet_action)
+
         kill_action = QAction("Kill pet >:)", self)
         kill_action.triggered.connect(qApp.quit)
-        menu.addAction(pet_action)
         menu.addAction(kill_action)
+        
         menu.exec_(global_pos)
+
+    def show_performance_review(self):
+        """Creates or updates the review window."""
+        if not self.review_window:
+            self.review_window = PerformanceReviewWindow(pet_status)
+        else:
+            self.review_window.update_stats()
+        self.review_window.show()
+
+    def toggle_tracking(self, mode):
+        """Toggles the CV tracking states."""
+        if mode == "work":
+            self.is_tracking_work = not self.is_tracking_work
+            print(f"Work Tracking: {self.is_tracking_work}")
+        elif mode == "workout":
+            self.is_tracking_workout = not self.is_tracking_workout
+            print(f"Workout Tracking: {self.is_tracking_workout}")
 
     def show_thanks(self):
         if not self.is_punishing:
@@ -440,5 +558,8 @@ class DesktopPet(QLabel):
 
 def spawn_pet():
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False) # Added because menu kept closing the pet
     pet = DesktopPet(productivity_app="Firefox Nightly")
-    sys.exit(app.exec_())
+    status_code = app.exec_()
+    pet_status.save_to_file()
+    sys.exit(status_code)
