@@ -196,6 +196,10 @@ class FaceTracker:
 
     # print("FaceLandmarker detector initialized successfully.")
 
+
+face_tracker = FaceTracker()
+
 if __name__ == "__main__":
-    face_tracker = FaceTracker()
     face_tracker.start_timer(0.5)        
+
+

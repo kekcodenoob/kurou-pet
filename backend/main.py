@@ -5,10 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 # Import the pet_status instance and the spawn function
 from pet_window_tracking import spawn_pet, pet_status
-from facelandmarker import FaceTracker
 
 app = FastAPI()
-face_tracker = FaceTracker()
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,8 +43,8 @@ def main():
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
 
-    tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
-    tracker_thread.start()
+    # tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
+    # tracker_thread.start()
     
     print("Dashboard available at: http://127.0.0.1:8000/dashboard")
     

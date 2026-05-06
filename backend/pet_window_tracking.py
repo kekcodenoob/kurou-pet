@@ -9,6 +9,9 @@ from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp, QWidget,
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 
+from facelandmarker import face_tracker
+
+
 class PerformanceReviewWindow(QWidget):
     # Pop-up to display the same stats as in pet_status
     def __init__(self, status):
@@ -498,11 +501,27 @@ class DesktopPet(QLabel):
         
         menu.addSeparator()
 
-        # New Tracking Toggles for Work and Workout
-        work_action = QAction("Track Work Focus", self, checkable=True)
-        work_action.setChecked(self.is_tracking_work)
-        work_action.triggered.connect(lambda: self.toggle_tracking("work"))
-        menu.addAction(work_action)
+        focus_1_minute_action = QAction("Focus for 1 minute", self)
+        focus_1_minute_action.setChecked(self.is_tracking_work)
+        focus_1_minute_action.triggered.connect(lambda: self.start_focus_timer(1))
+        menu.addAction(focus_1_minute_action)
+
+        focus_15_minute_action = QAction("Focus for 15 minutes", self)
+        focus_15_minute_action.setChecked(self.is_tracking_work)
+        focus_15_minute_action.triggered.connect(lambda: self.start_focus_timer(15))
+        menu.addAction(focus_15_minute_action)
+
+        focus_30_minute_action = QAction("Focus for 30 minutes", self)
+        focus_30_minute_action.setChecked(self.is_tracking_work)
+        focus_30_minute_action.triggered.connect(lambda: self.start_focus_timer(30))
+        menu.addAction(focus_30_minute_action)
+
+        focus_1_hour_action = QAction("Focus for 1 hour", self)
+        focus_1_hour_action.setChecked(self.is_tracking_work)
+        focus_1_hour_action.triggered.connect(lambda: self.start_focus_timer(60))
+        menu.addAction(focus_1_hour_action)
+
+        menu.addSeparator()
 
         workout_action = QAction("Track Workout", self, checkable=True)
         workout_action.setChecked(self.is_tracking_workout)
@@ -520,6 +539,15 @@ class DesktopPet(QLabel):
         menu.addAction(kill_action)
         
         menu.exec_(global_pos)
+
+    def start_focus_timer(self, minutes):
+        good_job = face_tracker.start_timer(minutes)
+        if good_job:
+            print("yippee")
+            pet_status.find_happiness_causes(["Adequately focused"])
+            pet_status.increment_happiness()
+        else:
+            print("damn.")
 
     def show_performance_review(self):
         """Creates or updates the review window."""
