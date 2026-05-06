@@ -5,9 +5,22 @@ import platform
 import os
 import json
 import pywinctl as pwc
-from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QAction, qApp, QWidget, QVBoxLayout, QTextEdit, QPushButton # --- CHANGED: Added UI components ---
+from PyQt5.QtWidgets import (
+    QApplication,
+    QLabel,
+    QMenu,
+    QAction,
+    qApp,
+    QWidget,
+    QVBoxLayout,
+    QTextEdit,
+    QPushButton,
+)
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
+
+from facelandmarker import face_tracker
+
 
 class PerformanceReviewWindow(QWidget):
     # Pop-up to display the same stats as in pet_status
@@ -16,46 +29,50 @@ class PerformanceReviewWindow(QWidget):
         self.status = status
         self.setWindowTitle("Pet Performance Review")
         self.setFixedSize(400, 500)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint) # Keep it above other windows
-        
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)  # Keep it above other windows
+
         layout = QVBoxLayout()
         self.text_display = QTextEdit()
         self.text_display.setReadOnly(True)
         layout.addWidget(self.text_display)
-        
+
         refresh_btn = QPushButton("Refresh Stats")
         refresh_btn.clicked.connect(self.update_stats)
         layout.addWidget(refresh_btn)
-        
+
         self.setLayout(layout)
         self.update_stats()
 
     def update_stats(self):
         """Formats the data from PetStatus into a readable report."""
-        report = f"--- PET OVERALL STATUS ---\n"
+        report = "--- PET OVERALL STATUS ---\n"
         report += f"Affection Points: {self.status.get_affection_points()}\n"
         report += f"Happiness Total: {self.status.get_happiness_count()}\n"
         report += f"Anger Total: {self.status.get_anger_count()}\n\n"
-        
+
         report += "--- SOURCES OF JOY ---\n"
         for joy, count in self.status.happiness_causes.items():
             report += f"• {joy}: {count} times\n"
-            
+
         report += "\n--- SOURCES OF ANGER ---\n"
         for platform_name, data in self.status.anger_causes.items():
             if platform_name == "Desktop Pet":
                 report += f"• {platform_name}: {data.get('Excessive taps', 0)} annoying taps\n"
             else:
                 report += f"• {platform_name}: {data.get('Total seconds', 0)}s spent distracted\n"
-                for tab, seconds in data.get('Tabs', {}).items():
+                for tab, seconds in data.get("Tabs", {}).items():
                     report += f"   - {tab[:30]}... ({seconds}s)\n"
-        
+
         self.text_display.setPlainText(report)
+
+
 # --- END NEW CLASS ---
+
 
 class AngerSource:
     name: str
     seconds: int
+
 
 # Getting info from the pet to display on the FastAPI server
 class PetStatus:
@@ -65,8 +82,8 @@ class PetStatus:
         self.happiness_count = 0
         self.happiness_causes = {}
         self.anger_count = 0
-        self.anger_causes = {} 
-        self.load_from_file() # Auto-load on creation
+        self.anger_causes = {}
+        self.load_from_file()  # Auto-load on creation
 
     def save_to_file(self):
         """Writes current state to JSON."""
@@ -75,7 +92,7 @@ class PetStatus:
             "happiness_count": self.happiness_count,
             "happiness_causes": self.happiness_causes,
             "anger_count": self.anger_count,
-            "anger_causes": self.anger_causes
+            "anger_causes": self.anger_causes,
         }
         with open(self.filename, "w") as f:
             json.dump(data, f, indent=4)
@@ -93,35 +110,32 @@ class PetStatus:
                     self.anger_causes = data.get("anger_causes", {})
             except Exception as e:
                 print(f"Error loading save file: {e}")
-        
+
     def increment_anger(self):
         self.affection_points -= 1
         self.anger_count += 1
-        
+
     def increment_happiness(self):
         self.affection_points += 1
         self.happiness_count += 1
-        
+
     def get_affection_points(self):
         return self.affection_points
-        
+
     def get_anger_count(self):
         return self.anger_count
-        
-    def find_anger_causes(self, found_distractions, increment_num = 5):
+
+    def find_anger_causes(self, found_distractions, increment_num=5):
         # found_distractions now strucutred like (distraction platform, tab title). Ex: "Youtube" : 20 seconds, "Game Playthrough - Youtube": 15 seconds)
         for platform_name, title in found_distractions:
             stripped_app = title.strip()
-            
+
             # Storing pet annoyances and new platform distractions (Youtube, Reddit, etc.)
             if platform_name not in self.anger_causes:
                 if platform_name == "Desktop Pet":
                     self.anger_causes[platform_name] = {"Excessive taps": 0}
                 else:
-                    self.anger_causes[platform_name] = {
-                        "Total seconds": 0,
-                        "Tabs": {}
-                    }
+                    self.anger_causes[platform_name] = {"Total seconds": 0, "Tabs": {}}
             # Added this to track times pet was tapped too much, since that's not a time-based metric
             if platform_name == "Desktop Pet":
                 self.anger_causes[platform_name]["Excessive taps"] += increment_num
@@ -133,12 +147,12 @@ class PetStatus:
                     self.anger_causes[platform_name]["Tabs"][stripped_app] = 0
                 # Same deal with the platform stuff
                 self.anger_causes[platform_name]["Tabs"][stripped_app] += increment_num
-            
+
         return self.anger_causes
-        
+
     def get_happiness_count(self):
         return self.happiness_count
-        
+
     def find_happiness_causes(self, happiness_source):
         for joy in happiness_source:
             if joy in self.happiness_causes:
@@ -147,19 +161,20 @@ class PetStatus:
                 self.happiness_causes[joy] = 1
         return self.happiness_causes
 
-    
+
 pet_status = PetStatus()
+
 
 # Window tracking stuff
 def focus_keeper(target_title):
     # Brings intended window to foreground if possible
     # Forces window pop up with simulated keystrokes across each platform
     if platform.system() == "Windows":
-        pyautogui.press("alt") 
-    elif platform.system() == "Darwin": # macOS
-        pyautogui.hotkey('command', 'tab')
+        pyautogui.press("alt")
+    elif platform.system() == "Darwin":  # macOS
+        pyautogui.hotkey("command", "tab")
     elif platform.system() == "Linux":
-        pyautogui.hotkey('alt', 'tab')
+        pyautogui.hotkey("alt", "tab")
 
     try:
         windows = pwc.getWindowsWithTitle(target_title)
@@ -188,7 +203,7 @@ def get_active_distractions():
         "CryEngine",
         "DEMO",
         "Loading Bay",
-        "DELTARUNE"
+        "DELTARUNE",
     ]
     social_title = [
         "Facebook",
@@ -213,8 +228,8 @@ def get_active_distractions():
         if not title:
             continue
         lowered = title.lower()
-        
-        # Trying to match Tabs to their general platforms 
+
+        # Trying to match Tabs to their general platforms
         matched_platform = None
         for keyword in game_title:
             if keyword.lower() in lowered:
@@ -226,7 +241,7 @@ def get_active_distractions():
         if not matched_platform:
             for keyword in social_title:
                 if keyword.lower() in lowered:
-                    if keyword == "r/": # r/ was weird so I replaced its displayed name
+                    if keyword == "r/":  # r/ was weird so I replaced its displayed name
                         matched_platform = "Reddit"
                     else:
                         matched_platform = keyword
@@ -234,15 +249,21 @@ def get_active_distractions():
         # Add platform and specific window name to distractions
         if matched_platform:
             found_distractions.append((matched_platform, title))
-            
+
     return found_distractions
+
 
 # Desktop pet related classes
 class SpeechBubble(QLabel):
     def __init__(self, text, color, x, y, font_family, font_size):
         super().__init__()
         # Speech always on top of monitor
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.X11BypassWindowManagerHint)
+        self.setWindowFlags(
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.Tool
+            | Qt.X11BypassWindowManagerHint
+        )
         self.raise_()
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setText(text)
@@ -253,11 +274,17 @@ class SpeechBubble(QLabel):
         self.move(int(x), int(y))
         self.show()
 
+
 class DesktopPet(QLabel):
     def __init__(self, productivity_app="Firefox Nightly"):  # Subject to change ofc :P
         super().__init__()
         # Pet always on top of monitor
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.X11BypassWindowManagerHint)
+        self.setWindowFlags(
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | Qt.Tool
+            | Qt.X11BypassWindowManagerHint
+        )
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         # Variables
@@ -270,7 +297,7 @@ class DesktopPet(QLabel):
         self.total_walk_distance = 0
         self.walk_direction = 0
 
-        self.review_window = None 
+        self.review_window = None
         self.is_tracking_work = False
         self.is_tracking_workout = False
 
@@ -339,10 +366,10 @@ class DesktopPet(QLabel):
             # Chose to print only titles since we know the platform from just that :DD
             titles_only = [item[1] for item in found_distractions]
             print(f"Active distractions: {titles_only}")
-            
-            pet_status.find_anger_causes(found_distractions) 
+
+            pet_status.find_anger_causes(found_distractions)
             self.trigger_punishment()
-            pet_status.increment_anger() 
+            pet_status.increment_anger()
         else:
             self.stop_punishment()
 
@@ -477,7 +504,9 @@ class DesktopPet(QLabel):
                 font_size=35,
             )
             # Formatted pet specific anger causes like the platform/title ones, so I can increment excessive taps by 1
-            pet_status.find_anger_causes([("Desktop Pet", "Too many taps")], increment_num=1) 
+            pet_status.find_anger_causes(
+                [("Desktop Pet", "Too many taps")], increment_num=1
+            )
             pet_status.increment_anger()
             self.active_bubbles.append(annoyed_speech)
 
@@ -490,19 +519,35 @@ class DesktopPet(QLabel):
 
     def pet_right_click(self, global_pos):
         menu = QMenu(self)
-        
+
         # New Performance Review Action
         review_action = QAction("Performance Review", self)
         review_action.triggered.connect(self.show_performance_review)
         menu.addAction(review_action)
-        
+
         menu.addSeparator()
 
-        # New Tracking Toggles for Work and Workout
-        work_action = QAction("Track Work Focus", self, checkable=True)
-        work_action.setChecked(self.is_tracking_work)
-        work_action.triggered.connect(lambda: self.toggle_tracking("work"))
-        menu.addAction(work_action)
+        focus_1_minute_action = QAction("Focus for 1 minute", self)
+        focus_1_minute_action.setChecked(self.is_tracking_work)
+        focus_1_minute_action.triggered.connect(lambda: self.start_focus_timer(1))
+        menu.addAction(focus_1_minute_action)
+
+        focus_15_minute_action = QAction("Focus for 15 minutes", self)
+        focus_15_minute_action.setChecked(self.is_tracking_work)
+        focus_15_minute_action.triggered.connect(lambda: self.start_focus_timer(15))
+        menu.addAction(focus_15_minute_action)
+
+        focus_30_minute_action = QAction("Focus for 30 minutes", self)
+        focus_30_minute_action.setChecked(self.is_tracking_work)
+        focus_30_minute_action.triggered.connect(lambda: self.start_focus_timer(30))
+        menu.addAction(focus_30_minute_action)
+
+        focus_1_hour_action = QAction("Focus for 1 hour", self)
+        focus_1_hour_action.setChecked(self.is_tracking_work)
+        focus_1_hour_action.triggered.connect(lambda: self.start_focus_timer(60))
+        menu.addAction(focus_1_hour_action)
+
+        menu.addSeparator()
 
         workout_action = QAction("Track Workout", self, checkable=True)
         workout_action.setChecked(self.is_tracking_workout)
@@ -518,8 +563,17 @@ class DesktopPet(QLabel):
         kill_action = QAction("Kill pet >:)", self)
         kill_action.triggered.connect(qApp.quit)
         menu.addAction(kill_action)
-        
+
         menu.exec_(global_pos)
+
+    def start_focus_timer(self, minutes):
+        good_job = face_tracker.start_timer(minutes)
+        if good_job:
+            print("yippee")
+            pet_status.find_happiness_causes(["Adequately focused"])
+            pet_status.increment_happiness()
+        else:
+            print("damn.")
 
     def show_performance_review(self):
         """Creates or updates the review window."""
@@ -542,7 +596,12 @@ class DesktopPet(QLabel):
         if not self.is_punishing:
             color_options = ["orange", "purple", "blue", "pink"]
             center_x = self.x() + (self.width() / 2)
-            thanks_options = ["Thank you for the kind gesture, master.", "Much appreciated.", "Ah, that felt amazing. :)", "Once more, please."]
+            thanks_options = [
+                "Thank you for the kind gesture, master.",
+                "Much appreciated.",
+                "Ah, that felt amazing. :)",
+                "Once more, please.",
+            ]
             thanks_speech = SpeechBubble(
                 text=random.choice(thanks_options),
                 color=random.choice(color_options),
@@ -552,14 +611,19 @@ class DesktopPet(QLabel):
                 font_size=20,
             )
             pet_status.find_happiness_causes(["Pet the pet"])
-            pet_status.increment_happiness() # Reduce anger count for each sign of affection
+            pet_status.increment_happiness()  # Reduce anger count for each sign of affection
             self.active_bubbles.append(thanks_speech)
             QTimer.singleShot(3000, thanks_speech.deleteLater)
 
+
 def spawn_pet():
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False) # Added because menu kept closing the pet
+    app.setQuitOnLastWindowClosed(False)  # Added because menu kept closing the pet
     pet = DesktopPet(productivity_app="Firefox Nightly")
     status_code = app.exec_()
     pet_status.save_to_file()
     sys.exit(status_code)
+
+
+if __name__ == "__main__":
+    spawn_pet()
