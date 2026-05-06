@@ -112,7 +112,7 @@ def draw_connections(frame, keypoints, confidence_threshold=0.2):
             cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
 
 
-def start_exercise():
+def workout():
     cap = cv2.VideoCapture(0)
     print("MoveNet Lightning Livestreaming Started. Press 'q' to quit.")
 

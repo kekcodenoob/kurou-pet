@@ -5,6 +5,7 @@ import platform
 import os
 import json
 import pywinctl as pwc
+import webbrowser
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -20,6 +21,7 @@ from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 
 from facelandmarker import face_tracker
+from movenet import workout
 
 
 class PerformanceReviewWindow(QWidget):
@@ -576,21 +578,17 @@ class DesktopPet(QLabel):
             print("damn.")
 
     def show_performance_review(self):
-        """Creates or updates the review window."""
-        if not self.review_window:
-            self.review_window = PerformanceReviewWindow(pet_status)
-        else:
-            self.review_window.update_stats()
-        self.review_window.show()
+            """Opens the local FastAPI dashboard in the default web browser."""
+            # Open dashboard link instead of creating pop-up
+            url = "http://127.0.0.1:8000/dashboard" 
+            webbrowser.open(url)
 
     def toggle_tracking(self, mode):
         """Toggles the CV tracking states."""
-        if mode == "work":
-            self.is_tracking_work = not self.is_tracking_work
-            print(f"Work Tracking: {self.is_tracking_work}")
-        elif mode == "workout":
+        if mode == "workout":
             self.is_tracking_workout = not self.is_tracking_workout
             print(f"Workout Tracking: {self.is_tracking_workout}")
+            workout()
 
     def show_thanks(self):
         if not self.is_punishing:
