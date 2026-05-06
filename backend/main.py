@@ -8,7 +8,7 @@ from pet_window_tracking import spawn_pet, pet_status
 from facelandmarker import FaceTracker
 
 app = FastAPI()
-face_tracker = FaceTracker()
+#face_tracker = FaceTracker()
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,17 +42,18 @@ def run_server():
 
 def main():
     # daemon=True ensures the server closes when you close the Desktop Pet
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
+    # server_thread = threading.Thread(target=run_server, daemon=True)
+    # server_thread.start()
 
-    tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
-    tracker_thread.start()
-    
     print("Dashboard available at: http://127.0.0.1:8000/dashboard")
+
+
+    run_server()
+    
     
     # 2. Start the Pet (This will block until the window is closed)
     # pet_status.load_from_file() is called inside PetStatus.__init__ automatically
-    spawn_pet()
+    #spawn_pet()
     
 if __name__ == "__main__":
     main()
