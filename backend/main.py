@@ -6,6 +6,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow  # noqa: F401
 
 import uvicorn
+import threading
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -53,8 +54,9 @@ def run_server():
 
 def main():
     # daemon=True ensures the server closes when you close the Desktop Pet
-    # server_thread = threading.Thread(target=run_server, daemon=True)
-    # server_thread.start()
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+
     # tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
     # tracker_thread.start()
 
