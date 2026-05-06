@@ -1,13 +1,20 @@
+from pathlib import Path
+
 import tensorflow as tf
-import tensorflow_hub as hub
 import cv2
 import numpy as np
 
-# Load the MoveNet Lightning model from TF Hub
-model = hub.load("https://tfhub.dev/google/movenet/singlepose/lightning/4")
-movenet = model.signatures['serving_default']
+MODEL_PATH = (
+    Path(__file__).resolve().parent
+    / "models"
+    / "movenet-tensorflow2-singlepose-lightning-v4"
+)
 
-#indices we need
+# Load the bundled MoveNet Lightning SavedModel from disk.
+model = tf.saved_model.load(str(MODEL_PATH))
+movenet = model.signatures["serving_default"]
+
+# indices we need
 LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST = 5, 7, 9
 RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST = 6, 8, 10
 
@@ -27,16 +34,22 @@ def compute_angle(a, b, c):
     cos_angle = np.clip(cos_angle, -1.0, 1.0)
 
     return float(np.degrees(np.arccos(cos_angle)))
-    
+
 
 def arm_angle(keypoints, shoulder_i, elbow_i, wrist_i):
-    shoulder, elbow, wrist = keypoints[shoulder_i], keypoints[elbow_i], keypoints[wrist_i]
+    shoulder, elbow, wrist = (
+        keypoints[shoulder_i],
+        keypoints[elbow_i],
+        keypoints[wrist_i],
+    )
     min_conf = float(min(shoulder[2], elbow[2], wrist[2]))
 
     if min_conf < ARM_CONF_THRESHOLD:
         return None, min_conf
 
-    return compute_angle(shoulder[:2], elbow[:2], wrist[:2]), min_conf # [:2] strips confidence score
+    return compute_angle(
+        shoulder[:2], elbow[:2], wrist[:2]
+    ), min_conf  # [:2] strips confidence score
 
 
 def best_elbow_angle(keypoints):
@@ -50,44 +63,61 @@ def best_elbow_angle(keypoints):
         return right
     if right is None:
         return left
-        
+
     return left if left_conf >= right_conf else right
 
 
 def draw_keypoints(frame, keypoints, confidence_threshold=0.2):
     y, x, c = frame.shape
     shaped = np.multiply(keypoints, [y, x, 1])
-    
+
     for kp in shaped:
         ky, kx, kp_conf = kp
         if kp_conf > confidence_threshold:
             cv2.circle(frame, (int(kx), int(ky)), 4, (0, 255, 0), -1)
 
+
 def draw_connections(frame, keypoints, confidence_threshold=0.2):
     # MoveNet keypoint connections (pairs)
     EDGES = {
-        (0, 1): 'm', (0, 2): 'c', (1, 3): 'm', (2, 4): 'c', (0, 5): 'm', (0, 6): 'c',
-        (5, 7): 'm', (7, 9): 'm', (6, 8): 'c', (8, 10): 'c', (5, 6): 'y', (5, 11): 'm',
-        (6, 12): 'c', (11, 12): 'y', (11, 13): 'm', (13, 15): 'm', (12, 14): 'c', (14, 16): 'c'
+        (0, 1): "m",
+        (0, 2): "c",
+        (1, 3): "m",
+        (2, 4): "c",
+        (0, 5): "m",
+        (0, 6): "c",
+        (5, 7): "m",
+        (7, 9): "m",
+        (6, 8): "c",
+        (8, 10): "c",
+        (5, 6): "y",
+        (5, 11): "m",
+        (6, 12): "c",
+        (11, 12): "y",
+        (11, 13): "m",
+        (13, 15): "m",
+        (12, 14): "c",
+        (14, 16): "c",
     }
-    
+
     y, x, c = frame.shape
     shaped = np.multiply(keypoints, [y, x, 1])
-    
+
     for edge, color in EDGES.items():
         p1, p2 = edge
         y1, x1, c1 = shaped[p1]
         y2, x2, c2 = shaped[p2]
-        
+
         if (c1 > confidence_threshold) & (c2 > confidence_threshold):
             cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
 
-def main():
+
+def start_exercise():
     cap = cv2.VideoCapture(0)
     print("MoveNet Lightning Livestreaming Started. Press 'q' to quit.")
 
     count = 0
-    state = "up" # assumes person starts with arms extended
+    state = "up"  # assumes person starts with arms extended
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -102,7 +132,7 @@ def main():
         # Run inference
         outputs = movenet(input_image)
         # Output is a [1, 1, 17, 3] tensor
-        keypoints = outputs['output_0'].numpy()[0, 0, :, :]
+        keypoints = outputs["output_0"].numpy()[0, 0, :, :]
 
         angle = best_elbow_angle(keypoints)
 
@@ -111,24 +141,44 @@ def main():
                 state = "down"
             elif state == "down" and angle > UP_ANGLE:
                 state = "up"
-                count+=1
-            
-        
+                count += 1
+
         # Draw onto the original frame
         draw_connections(frame, keypoints)
         draw_keypoints(frame, keypoints)
 
-        cv2.putText(frame, f"Reps: {count}", (10, 40),
-            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)                                                                                                
-        cv2.putText(frame, f"State: {state}", (10, 80),                                                                                                           
-            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)                                                                                              
-        if angle is not None:                                                                                                                                     
-            cv2.putText(frame, f"Angle: {angle:.1f}", (10, 115),                                                                                                  
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2) 
+        cv2.putText(
+            frame,
+            f"Reps: {count}",
+            (10, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.2,
+            (0, 255, 0),
+            2,
+        )
+        cv2.putText(
+            frame,
+            f"State: {state}",
+            (10, 80),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 0),
+            2,
+        )
+        if angle is not None:
+            cv2.putText(
+                frame,
+                f"Angle: {angle:.1f}",
+                (10, 115),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (200, 200, 200),
+                2,
+            )
 
-        cv2.imshow('MoveNet Lightning', frame)
+        cv2.imshow("MoveNet Lightning", frame)
 
-        if cv2.waitKey(10) & 0xFF == ord('q'):
+        if cv2.waitKey(10) & 0xFF == ord("q"):
             break
 
     cap.release()
@@ -136,4 +186,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    start_exercise()
