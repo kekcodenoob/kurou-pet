@@ -5,7 +5,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 # Pre-initialize TensorFlow to avoid Windows DLL initialization issues
 import tensorflow  # noqa: F401
 
-import threading
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,10 +14,7 @@ from fastapi.responses import FileResponse
 from pet_window_tracking import spawn_pet, pet_status
 
 app = FastAPI()
-<<<<<<< HEAD
-#face_tracker = FaceTracker()
-=======
->>>>>>> 08e7308c45cac9c8d69547da45261f363cd1d937
+# face_tracker = FaceTracker()
 
 app.add_middleware(
     CORSMiddleware,
