@@ -14,15 +14,12 @@
         h1 { font-weight: 600; color: var(--accent); margin-bottom: 30px; border-bottom: 1px solid var(--border); width: 100%; text-align: center; padding-bottom: 10px; }
         h3 { margin-top: 0; color: #8b949e; font-size: 0.85rem; text-transform: uppercase; }
         .big-num { font-size: 3rem; font-weight: bold; margin: 10px 0; display: block; }
-        
-        /* Data Groupings */
         .data-section { margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px; }
         details { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; }
         summary { padding: 10px; cursor: pointer; font-weight: bold; display: flex; justify-content: space-between; }
         summary:hover { background: #21262d; }
         .tab-list { padding: 10px; font-size: 0.9rem; color: #8b949e; }
         .tab-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #21262d; }
-        
         .badge { background: var(--danger); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; }
         .success-text { color: var(--success); }
         .danger-text { color: var(--danger); }
@@ -36,7 +33,6 @@
         <div class="card">
             <h3>Total Affection</h3>
             <span class="big-num success-text" id="affection">0</span>
-            
             <div class="data-section">
                 <h3>Happiness Sources (Count: <span id="happy-total">0</span>)</h3>
                 <div id="happy-list"></div>
@@ -46,7 +42,6 @@
         <div class="card">
             <h3>Total Anger Events</h3>
             <span class="big-num danger-text" id="anger">0</span>
-            
             <div class="data-section">
                 <h3>Active Distractions (Expand for details)</h3>
                 <div id="anger-list"></div>
@@ -55,7 +50,6 @@
     </div>
 
     <script>
-        // Keep track of which platforms are currently expanded
     let openState = {};
 
     async function fetchData() {
@@ -63,18 +57,15 @@
             const res = await fetch('http://127.0.0.1:8000/');
             const data = await res.json();
 
-            // Update Totals
             document.getElementById('affection').innerText = data.total_affection_points;
             document.getElementById('anger').innerText = data.total_anger_count;
             document.getElementById('happy-total').innerText = data.total_happiness_count;
 
-            // Happiness List
             const happyList = document.getElementById('happy-list');
             happyList.innerHTML = Object.entries(data.source_of_happiness)
                 .map(([cause, count]) => `<div class="tab-item"><span>${cause}</span><span class="success-text">x${count}</span></div>`)
                 .join('') || "<p>No joy detected yet...</p>";
 
-            // Anger List (Dropdowns)
             const angerList = document.getElementById('anger-list');
             const sources = data.source_of_anger;
 
@@ -83,15 +74,27 @@
                 return;
             }
 
-            // Build HTML for each platform
             let newHtml = "";
             for (const platform in sources) {
                 const info = sources[platform];
                 const isPet = platform === "Desktop Pet";
-                const badgeVal = isPet ? `${info["Excessive taps"]} Taps` : `${info["Total seconds"]}s`;
-                
-                // Check if this platform was already open in the UI
+                const badgeVal = isPet ? `${info["Excessive taps"] || 0} Taps` : `${info["Total seconds"] || 0}s`;
                 const isOpen = openState[platform] ? "open" : "";
+
+                let tabListHtml = "";
+                if (isPet) {
+                    tabListHtml = `<div class="tab-item">• Tapping the pet too much</div>`;
+                } else if (info.Tabs && Object.keys(info.Tabs).length > 0) {
+                    tabListHtml = Object.entries(info.Tabs)
+                        .map(([tab, time]) => `
+                            <div class="tab-item">
+                                <span>• ${tab.length > 50 ? tab.substring(0, 47) + '...' : tab}</span>
+                                <span>(${time}s)</span>
+                            </div>
+                        `).join('');
+                } else {
+                    tabListHtml = `<div class="tab-item">No tabs recorded.</div>`;
+                }
 
                 newHtml += `
                     <details id="details-${platform}" ${isOpen} ontoggle="saveState('${platform}', this.open)">
@@ -100,18 +103,12 @@
                             <span class="badge">${badgeVal}</span>
                         </summary>
                         <div class="tab-list">
-                            ${!isPet && info.tabs ? Object.entries(info.tabs).map(([tab, time]) => `
-                                <div class="tab-item">
-                                    <span>${tab.length > 40 ? tab.substring(0, 37) + '...' : tab}</span>
-                                    <span>${time}s</span>
-                                </div>
-                            `).join('') : '<div class="tab-item">Interaction trigger.</div>'}
+                            ${tabListHtml}
                         </div>
                     </details>
                 `;
             }
             
-            // Only update if the data has actually changed to prevent flickering
             if (angerList.innerHTML !== newHtml) {
                 angerList.innerHTML = newHtml;
             }
@@ -119,7 +116,6 @@
         } catch (err) { console.error("API Connection Failed", err); }
     }
 
-    // Helper to remember which dropdowns the user clicked
     function saveState(platform, isOpen) {
         openState[platform] = isOpen;
     }
