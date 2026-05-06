@@ -1,6 +1,11 @@
 import time
 from pathlib import Path
 
+# import os
+
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+# import tensorflow  # noqa: F401
+
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -34,7 +39,7 @@ class FaceTracker:
     def start(self):
         # Creates a FaceLandermarker Object
         options = FaceLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=MODEL_PATH),
+            base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
             running_mode=VisionRunningMode.LIVE_STREAM,
             num_faces=1,
             min_face_detection_confidence=0.5,

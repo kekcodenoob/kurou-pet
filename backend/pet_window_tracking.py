@@ -19,6 +19,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 
+from facelandmarker import face_tracker
+
 
 class PerformanceReviewWindow(QWidget):
     # Pop-up to display the same stats as in pet_status
@@ -565,12 +567,6 @@ class DesktopPet(QLabel):
         menu.exec_(global_pos)
 
     def start_focus_timer(self, minutes):
-        try:
-            from facelandmarker import face_tracker
-        except ImportError as e:
-            print(f"Face tracking is unavailable: {e}")
-            return
-
         good_job = face_tracker.start_timer(minutes)
         if good_job:
             print("yippee")
