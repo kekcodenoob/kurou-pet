@@ -60,7 +60,7 @@ def main():
     # tracker_thread = threading.Thread(target=face_tracker.start, daemon=True)
     # tracker_thread.start()
 
-    print("Dashboard available at: http://127.0.0.1:8000/dashboard")
+    print("Dashboard available at: http://localhost:5173/")
 
     # 2. Start the Pet (This will block until the window is closed)
     # pet_status.load_from_file() is called inside PetStatus.__init__ automatically
