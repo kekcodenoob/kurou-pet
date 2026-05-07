@@ -5,6 +5,7 @@ import platform
 import os
 import json
 import pywinctl as pwc
+import webbrowser
 from PyQt5.QtWidgets import (
     QApplication,
     QLabel,
@@ -20,6 +21,7 @@ from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtGui import QPixmap, QPainter, QColor
 
 from facelandmarker import face_tracker
+from movenet import workout
 
 
 class PerformanceReviewWindow(QWidget):
@@ -115,9 +117,9 @@ class PetStatus:
         self.affection_points -= 1
         self.anger_count += 1
 
-    def increment_happiness(self):
-        self.affection_points += 1
-        self.happiness_count += 1
+    def increment_happiness(self, happy_amount=1):
+        self.affection_points += happy_amount
+        self.happiness_count += happy_amount
 
     def get_affection_points(self):
         return self.affection_points
@@ -527,9 +529,9 @@ class DesktopPet(QLabel):
 
         menu.addSeparator()
 
-        focus_1_minute_action = QAction("Focus for 1 minute", self)
+        focus_1_minute_action = QAction("Focus for 10 seconds", self)
         focus_1_minute_action.setChecked(self.is_tracking_work)
-        focus_1_minute_action.triggered.connect(lambda: self.start_focus_timer(1))
+        focus_1_minute_action.triggered.connect(lambda: self.start_focus_timer(0.17))
         menu.addAction(focus_1_minute_action)
 
         focus_15_minute_action = QAction("Focus for 15 minutes", self)
@@ -566,31 +568,40 @@ class DesktopPet(QLabel):
 
         menu.exec_(global_pos)
 
+    # Decided to increment the happiness every 5 seconds to avoid inflation. Ex: 15 minutes focused would've given 900 affection points (900 secs)
     def start_focus_timer(self, minutes):
         good_job = face_tracker.start_timer(minutes)
-        if good_job:
-            print("yippee")
-            pet_status.find_happiness_causes(["Adequately focused"])
-            pet_status.increment_happiness()
+        if good_job and minutes == 0.17:
+            print("yippee 10 seconds")
+            pet_status.find_happiness_causes(["• Adequately focused for 10 seconds"])
+            pet_status.increment_happiness(12)
+        elif good_job and minutes == 15:
+            print("yippee 15 minutes")
+            pet_status.find_happiness_causes(["• Adequately focused for 15 minutes"])
+            pet_status.increment_happiness(180)
+        elif good_job and minutes == 30:
+            print("yippee 30 minutes")
+            pet_status.find_happiness_causes(["• Adequately focused for 30 minutes"])
+            pet_status.increment_happiness(360)
+        elif good_job and minutes == 60:
+            print("yippee 1 hour")
+            pet_status.find_happiness_causes(["• Adequately focused for 1 hour"])
+            pet_status.increment_happiness(720)
         else:
             print("damn.")
 
     def show_performance_review(self):
-        """Creates or updates the review window."""
-        if not self.review_window:
-            self.review_window = PerformanceReviewWindow(pet_status)
-        else:
-            self.review_window.update_stats()
-        self.review_window.show()
+            """Opens the local FastAPI dashboard in the default web browser."""
+            # Open dashboard link instead of creating pop-up
+            url = "http://127.0.0.1:8000/dashboard" 
+            webbrowser.open(url)
 
     def toggle_tracking(self, mode):
         """Toggles the CV tracking states."""
-        if mode == "work":
-            self.is_tracking_work = not self.is_tracking_work
-            print(f"Work Tracking: {self.is_tracking_work}")
-        elif mode == "workout":
+        if mode == "workout":
             self.is_tracking_workout = not self.is_tracking_workout
             print(f"Workout Tracking: {self.is_tracking_workout}")
+            workout()
 
     def show_thanks(self):
         if not self.is_punishing:
@@ -610,7 +621,7 @@ class DesktopPet(QLabel):
                 font_family="Comic Sans MS",
                 font_size=20,
             )
-            pet_status.find_happiness_causes(["Pet the pet"])
+            pet_status.find_happiness_causes(["• Pet the pet"])
             pet_status.increment_happiness()  # Reduce anger count for each sign of affection
             self.active_bubbles.append(thanks_speech)
             QTimer.singleShot(3000, thanks_speech.deleteLater)
