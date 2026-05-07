@@ -520,8 +520,8 @@ class DesktopPet(QLabel):
 
     def pet_right_click(self, global_pos):
         menu = QMenu(self)
+
         sprite_menu = menu.addMenu("Change Model")
-        
         # Each person's choice of model
         models = [
             ("Kurourushi", "roach.webp"),
@@ -529,7 +529,6 @@ class DesktopPet(QLabel):
             ("Pompom", "pompompurin.png"),
             ("Toon Link", "toon_link.png")
         ]
-
         for name, path in models:
             action = QAction(name, self)
             # Use a lambda with a default variable (p=path) to avoid closure issues
@@ -545,25 +544,19 @@ class DesktopPet(QLabel):
 
         menu.addSeparator()
 
-        focus_1_minute_action = QAction("Focus for 10 seconds", self)
-        focus_1_minute_action.setChecked(self.is_tracking_work)
-        focus_1_minute_action.triggered.connect(lambda: self.start_focus_timer(0.17))
-        menu.addAction(focus_1_minute_action)
-
-        focus_15_minute_action = QAction("Focus for 15 minutes", self)
-        focus_15_minute_action.setChecked(self.is_tracking_work)
-        focus_15_minute_action.triggered.connect(lambda: self.start_focus_timer(15))
-        menu.addAction(focus_15_minute_action)
-
-        focus_30_minute_action = QAction("Focus for 30 minutes", self)
-        focus_30_minute_action.setChecked(self.is_tracking_work)
-        focus_30_minute_action.triggered.connect(lambda: self.start_focus_timer(30))
-        menu.addAction(focus_30_minute_action)
-
-        focus_1_hour_action = QAction("Focus for 1 hour", self)
-        focus_1_hour_action.setChecked(self.is_tracking_work)
-        focus_1_hour_action.triggered.connect(lambda: self.start_focus_timer(60))
-        menu.addAction(focus_1_hour_action)
+        # Sub-menu for focus timer options
+        focus_menu = menu.addMenu("Focus Mode")
+        focus_times = [
+            ("Focus for 10 seconds", 0.17),
+            ("Focus for 15 minutes", 15),
+            ("Focus for 30 minutes", 30),
+            ("Focus for 1 hour", 60)
+        ]
+        # Same method as displaying and loading each sprite option
+        for label, minutes in focus_times:
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked, m=minutes: self.start_focus_timer(m))
+            focus_menu.addAction(action)
 
         menu.addSeparator()
 
