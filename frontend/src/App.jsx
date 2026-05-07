@@ -14,34 +14,7 @@ import {
 } from "recharts";
 
 function App() {
-  const [data, setData] = useState({
-    total_affection_points: 8,
-    total_happiness_count: 15,
-    source_of_happiness: {
-      "\u2022 Pet the pet": 15,
-    },
-    total_anger_count: 7,
-    source_of_anger: {
-      "Desktop Pet": {
-        "Excessive taps": 1,
-      },
-      YouTube: {
-        "Total seconds": 75,
-        Tabs: {
-          "We Raced to Every Train Station in Taiwan - Ep 7 - YouTube \u2014 Firefox Developer Edition": 30,
-          "The moon landing is fake, I have proof - Ep 29 - Youtube":45,
-        },
-      },
-      Netflix: {
-        "Total seconds": 100,
-        Tabs: {
-          "Jojo Siwa's great adventure": 23454,
-          "The moon landing is fake, I have proof - Ep 29 - Youtube":23452345,
-        },
-      },
-
-    },
-  });
+  const [data, setData] = useState();
 
   // Tracks which source rows are expanded. Keys are source names, values are true.
   // We use an object (not just a single string) so multiple rows can be open at once.
@@ -62,21 +35,21 @@ function App() {
     setHistory((prev) => [...prev, point].slice(-30));
   }, [data]);
 
-  // useEffect(() => {
-  //   async function fetchData() {
-  //     try {
-  //       const response = await fetch("http://127.0.0.1:8000/");
-  //       setData(await response.json());
-  //     } catch (err) {
-  //       console.error("Failed to fetch:", err);
-  //     }
-  //   }
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await fetch("http://127.0.0.1:8000/");
+        setData(await response.json());
+      } catch (err) {
+        console.error("Failed to fetch:", err);
+      }
+    }
 
-  //   fetchData();
-  //   const interval = setInterval(fetchData, 1000);
+    fetchData();
+    const interval = setInterval(fetchData, 1000);
 
-  //   return () => clearInterval(interval);
-  // }, []);
+    return () => clearInterval(interval);
+  }, []);
 
   if (!data) return <p style={styles.loading}>Connecting to Kurou Pet...</p>;
 
@@ -199,7 +172,10 @@ function App() {
           <p style={styles.empty}>Collecting data...</p>
         ) : (
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={history} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            <LineChart
+              data={history}
+              margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#33334d" />
               <XAxis dataKey="time" stroke="#888" tick={{ fontSize: 11 }} />
               <YAxis stroke="#888" tick={{ fontSize: 11 }} />
@@ -211,9 +187,27 @@ function App() {
                 }}
               />
               <Legend />
-              <Line type="monotone" dataKey="affection" stroke="#ff6b9d" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="happiness" stroke="#ffd93d" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="anger" stroke="#ff6b6b" strokeWidth={2} dot={false} />
+              <Line
+                type="monotone"
+                dataKey="affection"
+                stroke="#ff6b9d"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="happiness"
+                stroke="#ffd93d"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="anger"
+                stroke="#ff6b6b"
+                strokeWidth={2}
+                dot={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         )}
