@@ -112,7 +112,7 @@ def draw_connections(frame, keypoints, confidence_threshold=0.2):
             cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
 
 
-def workout(status_tracker, limit = 10):
+def workout(status_tracker, limit=10):
     cap = cv2.VideoCapture(0)
     print("MoveNet Lightning Livestreaming Started. Press 'q' to quit.")
 
@@ -122,6 +122,8 @@ def workout(status_tracker, limit = 10):
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
+            cap.release()
+            cv2.destroyAllWindows()
             return False
 
         # Resize and pad the image to keep the aspect ratio and fit the model input size (192x192)
@@ -143,11 +145,13 @@ def workout(status_tracker, limit = 10):
                 state = "up"
                 count += 1
                 status_tracker.find_happiness_causes(["• Completed a workout rep"])
-                status_tracker.increment_happiness(5) # Give 5 points per rep
-                status_tracker.save_to_file() 
+                status_tracker.increment_happiness(5)  # Give 5 points per rep
+                status_tracker.save_to_file()
                 print(f"Rep {count} registered. YAHOO!!")
-        
+
         if count >= limit:
+            cap.release()
+            cv2.destroyAllWindows()
             return True
 
         # Draw onto the original frame
@@ -186,11 +190,6 @@ def workout(status_tracker, limit = 10):
         cv2.imshow("MoveNet Lightning", frame)
 
         if cv2.waitKey(10) & 0xFF == ord("q"):
+            cap.release()
+            cv2.destroyAllWindows()
             return False
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    workout()
