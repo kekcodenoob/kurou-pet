@@ -667,7 +667,7 @@ class DesktopPet(QLabel):
     def show_performance_review(self):
             """Opens the local FastAPI dashboard in the default web browser."""
             # Open dashboard link instead of creating pop-up
-            url = "http://127.0.0.1:8000/dashboard" 
+            url = "http://localhost:5173/" 
             webbrowser.open(url)
 
     def toggle_tracking(self, mode):
