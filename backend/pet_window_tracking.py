@@ -67,10 +67,6 @@ class PerformanceReviewWindow(QWidget):
 
         self.text_display.setPlainText(report)
 
-
-# --- END NEW CLASS ---
-
-
 class AngerSource:
     name: str
     seconds: int
@@ -278,7 +274,7 @@ class SpeechBubble(QLabel):
 
 
 class DesktopPet(QLabel):
-    def __init__(self, productivity_app="Firefox Nightly"):  # Subject to change ofc :P
+    def __init__(self, productivity_app="Firefox Nightly"):
         super().__init__()
         # Pet always on top of monitor
         self.setWindowFlags(
@@ -304,7 +300,8 @@ class DesktopPet(QLabel):
         self.is_tracking_workout = False
 
         # Image setup
-        self.load_image()
+        self.current_pet_image = "roach.webp" # Default sprite
+        self.load_image(self.current_pet_image)
         screen_geom = QApplication.desktop().availableGeometry(self)
         self.move(
             screen_geom.width() - self.width() - 50,
@@ -329,32 +326,34 @@ class DesktopPet(QLabel):
         self.active_bubbles = []
         self.punish_bubble = None
 
-    def load_image(self):
+    def load_image(self, image_path):
+        """Loads and scales the pet image, or generates a colored box if missing."""
         pet_width = 235
         pet_height = 235
-        pixmap = QPixmap(r"roach.webp")
+        pixmap = QPixmap(image_path)
 
         if not pixmap.isNull():
             self.pixmap = pixmap.scaled(
-                pet_width, pet_height, Qt.IgnoreAspectRatio, Qt.SmoothTransformation
+                pet_width, pet_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
         else:
+            # Fallback if image path is wrong
             self.pixmap = QPixmap(pet_width, pet_height)
             self.pixmap.fill(Qt.transparent)
             painter = QPainter(self.pixmap)
-            colors = [
-                QColor("orange"),
-                QColor("purple"),
-                QColor("blue"),
-                QColor("pink"),
-            ]
-            painter.setBrush(random.choice(colors))
+            painter.setBrush(QColor("gray"))
             painter.drawRect(0, 0, pet_width - 1, pet_height - 1)
             painter.end()
 
         self.setPixmap(self.pixmap)
         self.setFixedSize(self.pixmap.width(), self.pixmap.height())
         self.setMask(self.pixmap.mask())
+
+    # Swapping pet sprite to one of user's choices
+    def change_pet_sprite(self, model_name, image_path):
+        print(f"Switching to {model_name}")
+        self.current_pet_image = image_path
+        self.load_image(image_path)
 
     # Same distraction hunter as OG window tracking
     def scan_for_distractions(self):
@@ -522,6 +521,22 @@ class DesktopPet(QLabel):
     def pet_right_click(self, global_pos):
         menu = QMenu(self)
 
+        sprite_menu = menu.addMenu("Change Model")
+        # Each person's choice of model
+        models = [
+            ("Kurourushi", "roach.webp"),
+            ("Spinda", "spinda.png"),
+            ("Pompom", "pompompurin.png"),
+            ("Toon Link", "toon_link.png")
+        ]
+        for name, path in models:
+            action = QAction(name, self)
+            # Use a lambda with a default variable (p=path) to avoid closure issues
+            action.triggered.connect(lambda checked, n=name, p=path: self.change_pet_sprite(n, p))
+            sprite_menu.addAction(action)
+
+        menu.addSeparator()
+
         # New Performance Review Action
         review_action = QAction("Performance Review", self)
         review_action.triggered.connect(self.show_performance_review)
@@ -529,25 +544,19 @@ class DesktopPet(QLabel):
 
         menu.addSeparator()
 
-        focus_1_minute_action = QAction("Focus for 10 seconds", self)
-        focus_1_minute_action.setChecked(self.is_tracking_work)
-        focus_1_minute_action.triggered.connect(lambda: self.start_focus_timer(0.17))
-        menu.addAction(focus_1_minute_action)
-
-        focus_15_minute_action = QAction("Focus for 15 minutes", self)
-        focus_15_minute_action.setChecked(self.is_tracking_work)
-        focus_15_minute_action.triggered.connect(lambda: self.start_focus_timer(15))
-        menu.addAction(focus_15_minute_action)
-
-        focus_30_minute_action = QAction("Focus for 30 minutes", self)
-        focus_30_minute_action.setChecked(self.is_tracking_work)
-        focus_30_minute_action.triggered.connect(lambda: self.start_focus_timer(30))
-        menu.addAction(focus_30_minute_action)
-
-        focus_1_hour_action = QAction("Focus for 1 hour", self)
-        focus_1_hour_action.setChecked(self.is_tracking_work)
-        focus_1_hour_action.triggered.connect(lambda: self.start_focus_timer(60))
-        menu.addAction(focus_1_hour_action)
+        # Sub-menu for focus timer options
+        focus_menu = menu.addMenu("Focus Mode")
+        focus_times = [
+            ("Focus for 10 seconds", 0.17),
+            ("Focus for 15 minutes", 15),
+            ("Focus for 30 minutes", 30),
+            ("Focus for 1 hour", 60)
+        ]
+        # Same method as displaying and loading each sprite option
+        for label, minutes in focus_times:
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked, m=minutes: self.start_focus_timer(m))
+            focus_menu.addAction(action)
 
         menu.addSeparator()
 
