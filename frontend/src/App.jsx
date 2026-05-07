@@ -4,33 +4,65 @@ import { useState, useEffect } from "react";
 import { Heart, Smile, Angry } from "lucide-react";
 
 function App() {
-  
-  const [data, setData] = useState(null);
+  const [data, setData] = useState({
+    affection_points: 8,
+    happiness_count: 15,
+    happiness_causes: {
+      "\u2022 Pet the pet": 15,
+    },
+    anger_count: 7,
+    anger_causes: {
+      "Desktop Pet": {
+        "Excessive taps": 1,
+      },
+      YouTube: {
+        "Total seconds": 30,
+        Tabs: {
+          "We Raced to Every Train Station in Taiwan - Ep 7 - YouTube \u2014 Firefox Developer Edition": 30,
+        },
+      },
+    },
+  });
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const response = await fetch("http://127.0.0.1:8000/");
-        setData(await response.json());
-      } catch (err) {
-        console.error("Failed to fetch:", err);
-      }
-    }
+  // useEffect(() => {
+  //   async function fetchData() {
+  //     try {
+  //       const response = await fetch("http://127.0.0.1:8000/");
+  //       setData(await response.json());
+  //     } catch (err) {
+  //       console.error("Failed to fetch:", err);
+  //     }
+  //   }
 
-    fetchData();                                      
-    const interval = setInterval(fetchData, 1000);     
-   
-    return () => clearInterval(interval);
-  }, []);
+  //   fetchData();
+  //   const interval = setInterval(fetchData, 1000);
+
+  //   return () => clearInterval(interval);
+  // }, []);
 
   if (!data) return <p style={styles.loading}>Connecting to Kurou Pet...</p>;
 
   // `Icon` here holds the *component itself* (not yet rendered).
   // We render it below with <c.Icon ... />.
   const cards = [
-    { label: "Affection Points", value: data.total_affection_points, accent: "#ff6b9d", Icon: Heart },
-    { label: "Happiness",        value: data.total_happiness_count,  accent: "#ffd93d", Icon: Smile },
-    { label: "Anger",            value: data.total_anger_count,      accent: "#ff6b6b", Icon: Angry },
+    {
+      label: "Affection Points",
+      value: data.total_affection_points,
+      accent: "#ff6b9d",
+      Icon: Heart,
+    },
+    {
+      label: "Happiness",
+      value: data.total_happiness_count,
+      accent: "#ffd93d",
+      Icon: Smile,
+    },
+    {
+      label: "Anger",
+      value: data.total_anger_count,
+      accent: "#ff6b6b",
+      Icon: Angry,
+    },
   ];
 
   // Object.entries({ key: value }) -> [["key", value], ...]
@@ -42,7 +74,7 @@ function App() {
         source,
         title,
         seconds,
-      }))
+      })),
     )
     .sort((a, b) => b.seconds - a.seconds);
 
@@ -54,7 +86,6 @@ function App() {
       <h1 style={styles.title}>Kurou Pet Dashboard</h1>
 
       <div style={styles.grid}>
-        
         {cards.map((c) => (
           <div
             key={c.label}
@@ -75,7 +106,9 @@ function App() {
           tabs.map((t) => (
             <div key={`${t.source}::${t.title}`} style={styles.tabRow}>
               <div style={styles.tabHeader}>
-                <span style={styles.tabTitle} title={t.title}>{t.title}</span>
+                <span style={styles.tabTitle} title={t.title}>
+                  {t.title}
+                </span>
                 <span style={styles.tabSeconds}>{t.seconds}s</span>
               </div>
               <div style={styles.tabBarTrack}>
