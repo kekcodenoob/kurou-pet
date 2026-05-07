@@ -1,13 +1,13 @@
 # Kurou Pet
 
-An interactive pet prototype built by Team 4 (SP'26).
+> An interactive pet prototype built by Team 4 (SP'26)
 
 ### Made by:
 
-- Kelvin ([@kekcodenoob](https://github.com/kekcodenoob))
-- Vanessa ([@vanessa0135](https://github.com/vanessa0135))
-- Sam ([@sams222](https://github.com/sams222))
-- Lemuel ([@lemueldls](https://github.com/lemueldls))
+- Kelvin Osei ([@kekcodenoob](https://github.com/kekcodenoob))
+- Vanessa Balbuena ([@vanessa0135](https://github.com/vanessa0135))
+- Sam Strugger ([@sams222](https://github.com/sams222))
+- Lemuel De Los Santos ([@lemueldls](https://github.com/lemueldls))
 
 ## Overview
 
@@ -42,9 +42,11 @@ which is what populates the dashboard.
   - `pet_window_tracking.py` - Kurou Pet backend code
 
 - `/frontend`
-  - Nothing much yet
+  - `src/App.jsx` - Dashboard to visualize data from the backend
 
 ## Running Locally
+
+### Backend
 
 ```console
 cd backend
@@ -52,6 +54,17 @@ cd backend
 
 ```console
 uv run main.py
+```
+
+### Frontend
+
+```console
+cd frontend
+```
+
+```console
+npm install
+npm run dev
 ```
 
 ## Future Improvements
