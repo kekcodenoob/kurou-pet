@@ -1,28 +1,43 @@
 import { useState, useEffect } from "react";
 // Each icon from lucide-react is its own React component you use like a custom tag,
 // e.g. <Heart />. Common props: `size` (px), `color`, `strokeWidth`.
-import { Heart, Smile, Angry } from "lucide-react";
+import { Heart, Smile, Angry, ChevronRight } from "lucide-react";
 
 function App() {
   const [data, setData] = useState({
-    affection_points: 8,
-    happiness_count: 15,
-    happiness_causes: {
+    total_affection_points: 8,
+    total_happiness_count: 15,
+    source_of_happiness: {
       "\u2022 Pet the pet": 15,
     },
-    anger_count: 7,
-    anger_causes: {
+    total_anger_count: 7,
+    source_of_anger: {
       "Desktop Pet": {
         "Excessive taps": 1,
       },
       YouTube: {
-        "Total seconds": 30,
+        "Total seconds": 75,
         Tabs: {
           "We Raced to Every Train Station in Taiwan - Ep 7 - YouTube \u2014 Firefox Developer Edition": 30,
+          "The moon landing is fake, I have proof - Ep 29 - Youtube":45,
         },
       },
+      Netflix: {
+        "Total seconds": 100,
+        Tabs: {
+          "Jojo Siwa's great adventure": 23454,
+          "The moon landing is fake, I have proof - Ep 29 - Youtube":23452345,
+        },
+      },
+
     },
   });
+
+  // Tracks which source rows are expanded. Keys are source names, values are true.
+  // We use an object (not just a single string) so multiple rows can be open at once.
+  const [expanded, setExpanded] = useState({});
+  const toggle = (source) =>
+    setExpanded((prev) => ({ ...prev, [source]: !prev[source] }));
 
   // useEffect(() => {
   //   async function fetchData() {
@@ -65,21 +80,22 @@ function App() {
     },
   ];
 
-  // Object.entries({ key: value }) -> [["key", value], ...]
-  // We walk every source (e.g. "YouTube"), then every tab inside its Tabs object,
-  // and flatten them into one list of { source, title, seconds }.
-  const tabs = Object.entries(data.source_of_anger || {})
-    .flatMap(([source, info]) =>
-      Object.entries(info.Tabs || {}).map(([title, seconds]) => ({
-        source,
-        title,
-        seconds,
-      })),
-    )
-    .sort((a, b) => b.seconds - a.seconds);
+  // Group by source: one entry per site (e.g. "YouTube"), with its total time
+  // and a nested list of individual tabs to show when expanded.
+  // We only keep sources that have a `Tabs` object — other shapes are ignored.
+  const sources = Object.entries(data.source_of_anger || {})
+    .filter(([, info]) => info.Tabs)
+    .map(([source, info]) => ({
+      source,
+      totalSeconds: info["Total seconds"] || 0,
+      tabs: Object.entries(info.Tabs)
+        .map(([title, seconds]) => ({ title, seconds }))
+        .sort((a, b) => b.seconds - a.seconds),
+    }))
+    .sort((a, b) => b.totalSeconds - a.totalSeconds);
 
   // Max value drives the bar widths. Math.max(1, ...) avoids dividing by zero.
-  const maxSeconds = Math.max(1, ...tabs.map((t) => t.seconds));
+  const maxSeconds = Math.max(1, ...sources.map((s) => s.totalSeconds));
 
   return (
     <div style={styles.page}>
@@ -99,29 +115,58 @@ function App() {
       </div>
 
       <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Time per tab</h2>
-        {tabs.length === 0 ? (
+        <h2 style={styles.sectionTitle}>Time per source</h2>
+        {sources.length === 0 ? (
           <p style={styles.empty}>No tab activity yet.</p>
         ) : (
-          tabs.map((t) => (
-            <div key={`${t.source}::${t.title}`} style={styles.tabRow}>
-              <div style={styles.tabHeader}>
-                <span style={styles.tabTitle} title={t.title}>
-                  {t.title}
-                </span>
-                <span style={styles.tabSeconds}>{t.seconds}s</span>
+          sources.map((s) => {
+            const isOpen = !!expanded[s.source];
+            return (
+              <div key={s.source} style={styles.sourceRow}>
+                {/* The clickable header. A <button> is the right element for
+                    "click to do something" — it's keyboard-accessible by default. */}
+                <button
+                  onClick={() => toggle(s.source)}
+                  style={styles.sourceButton}
+                >
+                  <ChevronRight
+                    size={18}
+                    style={{
+                      ...styles.chevron,
+                      // Rotate the arrow when expanded. Pure CSS — no extra icon needed.
+                      transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+                    }}
+                  />
+                  <span style={styles.sourceName}>{s.source}</span>
+                  <span style={styles.sourceSeconds}>{s.totalSeconds}s</span>
+                </button>
+
+                <div style={styles.tabBarTrack}>
+                  <div
+                    style={{
+                      ...styles.tabBarFill,
+                      width: `${(s.totalSeconds / maxSeconds) * 100}%`,
+                    }}
+                  />
+                </div>
+
+                {/* `&&` short-circuit: if isOpen is false, nothing renders.
+                    A common React pattern for "show this only when..." */}
+                {isOpen && (
+                  <div style={styles.tabList}>
+                    {s.tabs.map((t) => (
+                      <div key={t.title} style={styles.tabItem}>
+                        <span style={styles.tabTitle} title={t.title}>
+                          {t.title}
+                        </span>
+                        <span style={styles.tabSeconds}>{t.seconds}s</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div style={styles.tabBarTrack}>
-                <div
-                  style={{
-                    ...styles.tabBarFill,
-                    width: `${(t.seconds / maxSeconds) * 100}%`,
-                  }}
-                />
-              </div>
-              <div style={styles.tabSource}>{t.source}</div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -186,25 +231,36 @@ const styles = {
     opacity: 0.6,
     margin: 0,
   },
-  tabRow: {
-    padding: "10px 0",
+  sourceRow: {
+    padding: "12px 0",
     borderBottom: "1px solid #33334d",
   },
-  tabHeader: {
+  sourceButton: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    gap: 12,
-    marginBottom: 6,
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    color: "inherit",
+    font: "inherit",
+    padding: 0,
+    cursor: "pointer",
+    textAlign: "left",
+    marginBottom: 8,
   },
-  tabTitle: {
-    fontSize: 14,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+  chevron: {
+    transition: "transform 0.15s ease",
+    flexShrink: 0,
+    opacity: 0.7,
   },
-  tabSeconds: {
-    fontSize: 14,
+  sourceName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: 600,
+  },
+  sourceSeconds: {
+    fontSize: 16,
     fontWeight: 600,
     flexShrink: 0,
   },
@@ -219,10 +275,28 @@ const styles = {
     background: "#ff6b6b",
     borderRadius: 3,
   },
-  tabSource: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 4,
+  tabList: {
+    marginTop: 12,
+    paddingLeft: 28,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  tabItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    fontSize: 13,
+    opacity: 0.85,
+  },
+  tabTitle: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  tabSeconds: {
+    fontWeight: 600,
+    flexShrink: 0,
   },
 };
 

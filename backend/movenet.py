@@ -112,7 +112,7 @@ def draw_connections(frame, keypoints, confidence_threshold=0.2):
             cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
 
 
-def workout():
+def workout(limit = 10):
     cap = cv2.VideoCapture(0)
     print("MoveNet Lightning Livestreaming Started. Press 'q' to quit.")
 
@@ -122,7 +122,7 @@ def workout():
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
-            break
+            return False
 
         # Resize and pad the image to keep the aspect ratio and fit the model input size (192x192)
         img = frame.copy()
@@ -142,6 +142,9 @@ def workout():
             elif state == "down" and angle > UP_ANGLE:
                 state = "up"
                 count += 1
+        
+        if count >= limit:
+            return True
 
         # Draw onto the original frame
         draw_connections(frame, keypoints)
@@ -179,7 +182,7 @@ def workout():
         cv2.imshow("MoveNet Lightning", frame)
 
         if cv2.waitKey(10) & 0xFF == ord("q"):
-            break
+            return False
 
     cap.release()
     cv2.destroyAllWindows()
