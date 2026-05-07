@@ -2,6 +2,16 @@ import { useState, useEffect } from "react";
 // Each icon from lucide-react is its own React component you use like a custom tag,
 // e.g. <Heart />. Common props: `size` (px), `color`, `strokeWidth`.
 import { Heart, Smile, Angry, ChevronRight } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 function App() {
   const [data, setData] = useState({
@@ -38,6 +48,19 @@ function App() {
   const [expanded, setExpanded] = useState({});
   const toggle = (source) =>
     setExpanded((prev) => ({ ...prev, [source]: !prev[source] }));
+
+  const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    if (!data) return;
+    const point = {
+      time: new Date().toLocaleTimeString(),
+      affection: data.total_affection_points ?? 0,
+      happiness: data.total_happiness_count ?? 0,
+      anger: data.total_anger_count ?? 0,
+    };
+    setHistory((prev) => [...prev, point].slice(-30));
+  }, [data]);
 
   // useEffect(() => {
   //   async function fetchData() {
@@ -167,6 +190,32 @@ function App() {
               </div>
             );
           })
+        )}
+      </div>
+
+      <div style={styles.section}>
+        <h2 style={styles.sectionTitle}>Stats over time</h2>
+        {history.length === 0 ? (
+          <p style={styles.empty}>Collecting data...</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={history} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#33334d" />
+              <XAxis dataKey="time" stroke="#888" tick={{ fontSize: 11 }} />
+              <YAxis stroke="#888" tick={{ fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{
+                  background: "#1a1a2e",
+                  border: "1px solid #33334d",
+                  borderRadius: 8,
+                }}
+              />
+              <Legend />
+              <Line type="monotone" dataKey="affection" stroke="#ff6b9d" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="happiness" stroke="#ffd93d" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="anger" stroke="#ff6b6b" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         )}
       </div>
     </div>
