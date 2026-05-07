@@ -22,6 +22,16 @@ take care of your Kurou Pet!
 - Face tracking with Mediapipe Landmark
 - Kurou Pet System
 - Movenet Pose tracking for exercise detection
+- Window & tab activity tracking
+
+### Window Tracking
+
+Kurou Pet keeps an eye on what you're actually doing on your machine so the pet
+can react to it. The tracker enumerates open windows on a regular interval and
+classifies each one — work apps, games, and known social media / video sites
+(YouTube, Twitter, Reddit, TikTok, etc) are recognized by window title and
+class name. Time spent on distraction windows is logged per source and per tab,
+which is what populates the dashboard.
 
 ## Repository Layout
 
@@ -46,4 +56,9 @@ uv run main.py
 
 ## Future Improvements
 
-A lot of stuff
+- **Expanded Exercise Library** — Scaling Movenet capabilities beyond push-ups
+  to track squats, stretching, and mobility routines.
+- **Pet Evolution Mechanics** — Introducing dynamic visual upgrades and
+  lifecycles for the pet based on long-term user focus streaks.
+- **Community Aspect** — Allowing stats to be shareable across users to
+  encourage them to work hard like their peers.
