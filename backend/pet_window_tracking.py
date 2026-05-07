@@ -76,6 +76,7 @@ class AngerSource:
 class PetStatus:
     def __init__(self, filename="pet_data.json"):
         self.filename = filename
+        self.unlocked_sprites = ["roach.webp"] # Added to prevent sprites from getting locked after buying them
         self.affection_points = 0
         self.happiness_count = 0
         self.happiness_causes = {}
@@ -86,6 +87,7 @@ class PetStatus:
     def save_to_file(self):
         """Writes current state to JSON."""
         data = {
+            "unlocked_sprites": self.unlocked_sprites,
             "affection_points": self.affection_points,
             "happiness_count": self.happiness_count,
             "happiness_causes": self.happiness_causes,
@@ -101,6 +103,7 @@ class PetStatus:
             try:
                 with open(self.filename, "r") as f:
                     data = json.load(f)
+                    self.unlocked_sprites = data.get("unlocked_sprites", ["roach.webp"])
                     self.affection_points = data.get("affection_points", 0)
                     self.happiness_count = data.get("happiness_count", 0)
                     self.happiness_causes = data.get("happiness_causes", {})
@@ -210,6 +213,7 @@ def get_active_distractions():
         "Reddit",
         "r/",
         "YouTube",
+        "Netflix",
         "TikTok",
         "Twitch",
         "Pinterest",
@@ -350,8 +354,19 @@ class DesktopPet(QLabel):
         self.setMask(self.pixmap.mask())
 
     # Swapping pet sprite to one of user's choices
-    def change_pet_sprite(self, model_name, image_path):
+    def change_pet_sprite(self, model_name, image_path, cost):
         print(f"Switching to {model_name}")
+        # Only charge if the sprite isn't already unlocked
+        if image_path not in pet_status.unlocked_sprites:
+            if pet_status.affection_points >= cost:
+                # Getting new sprites costs points now
+                pet_status.affection_points -= cost
+                pet_status.unlocked_sprites.append(image_path)
+                print(f"Unlocked {model_name} for {cost} points.")
+            else:
+                print("Not enough points.")
+                return
+        pet_status.save_to_file() # Save to .json :))
         self.current_pet_image = image_path
         self.load_image(image_path)
 
@@ -520,19 +535,48 @@ class DesktopPet(QLabel):
 
     def pet_right_click(self, global_pos):
         menu = QMenu(self)
+        current_affection = pet_status.get_affection_points()
+        owned = pet_status.unlocked_sprites
 
         sprite_menu = menu.addMenu("Change Model")
-        # Each person's choice of model
+        # Each person's choice of model. Starts with my roach then each new "skin" costs 500
+        # Format: (DisplayName, FileName, PointsRequired)
         models = [
-            ("Kurourushi", "roach.webp"),
-            ("Spinda", "spinda.png"),
-            ("Pompom", "pompompurin.png"),
-            ("Toon Link", "toon_link.png")
+            ("Kurourushi", "roach.webp", 0), # Starter
+            ("Spinda", "spinda.png", 10), # Keeping at 10 for testing
+            ("Pompompurin", "pompompurin.png", 500),
+            ("Toon Link", "toon_link.png", 500)
         ]
-        for name, path in models:
-            action = QAction(name, self)
-            # Use a lambda with a default variable (p=path) to avoid closure issues
-            action.triggered.connect(lambda checked, n=name, p=path: self.change_pet_sprite(n, p))
+
+        for name, path, cost in models:
+            # Logic: It's available if already owned OR if you have enough points
+            is_owned = path in owned
+            # Check if user has enough affection points
+            can_afford = current_affection >= cost
+            
+            if is_owned:
+                display_name = f"{name} (Owned)"
+            elif can_afford:
+                display_name = f"Buy {name} ({cost} pts)"
+            else:
+                # Show exactly how many more points are needed to hit the mark
+                points_remaining = cost - current_affection
+                display_name = f"{name} (Locked: {points_remaining} more pts)"
+
+            action = QAction(display_name, self)
+            
+            # Disable only if not owned AND can't afford
+            if not is_owned and not can_afford:
+                action.setEnabled(False)
+            else:
+                # Added a checkmark to the currently active sprite for better clarity
+                if self.current_pet_image == path:
+                    action.setCheckable(True)
+                    action.setChecked(True)
+                
+                # Use a lambda with a default variable (p=path) to avoid closure issues
+                action.triggered.connect(lambda checked, n=name, p=path, c=cost: self.change_pet_sprite(n, p, c))
+            
             sprite_menu.addAction(action)
 
         menu.addSeparator()
@@ -608,9 +652,12 @@ class DesktopPet(QLabel):
     def toggle_tracking(self, mode):
         """Toggles the CV tracking states."""
         if mode == "workout":
-            self.is_tracking_workout = not self.is_tracking_workout
+            self.is_tracking_workout = True
             print(f"Workout Tracking: {self.is_tracking_workout}")
-            workout()
+            completed_reps = workout(pet_status, limit=10)
+            if completed_reps:
+                print("Workout complete.")
+            self.is_tracking_workout = False
 
     def show_thanks(self):
         if not self.is_punishing:

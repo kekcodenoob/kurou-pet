@@ -112,7 +112,7 @@ def draw_connections(frame, keypoints, confidence_threshold=0.2):
             cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
 
 
-def workout(limit = 10):
+def workout(status_tracker, limit = 10):
     cap = cv2.VideoCapture(0)
     print("MoveNet Lightning Livestreaming Started. Press 'q' to quit.")
 
@@ -142,6 +142,10 @@ def workout(limit = 10):
             elif state == "down" and angle > UP_ANGLE:
                 state = "up"
                 count += 1
+                status_tracker.find_happiness_causes(["• Completed a workout rep"])
+                status_tracker.increment_happiness(5) # Give 5 points per rep
+                status_tracker.save_to_file() 
+                print(f"Rep {count} registered. YAHOO!!")
         
         if count >= limit:
             return True
