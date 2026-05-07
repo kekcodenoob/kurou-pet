@@ -280,13 +280,10 @@ class SpeechBubble(QLabel):
 class DesktopPet(QLabel):
     def __init__(self, productivity_app="Firefox Nightly"):
         super().__init__()
-        # Pet always on top of monitor
-        self.setWindowFlags(
-            Qt.FramelessWindowHint
-            | Qt.WindowStaysOnTopHint
-            | Qt.Tool
-            | Qt.X11BypassWindowManagerHint
-        )
+
+        # Store user window flag preference instead of Always on Top
+        self.always_on_top_pref = True
+        self.apply_window_state()
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         # Variables
@@ -329,6 +326,22 @@ class DesktopPet(QLabel):
 
         self.active_bubbles = []
         self.punish_bubble = None
+    
+    # Forces pet to top
+    def apply_window_state(self, force_top=False):
+        """Re-applies window flags based on preference or emergency punishment."""
+        flags = Qt.FramelessWindowHint | Qt.Tool | Qt.X11BypassWindowManagerHint
+        if force_top or self.always_on_top_pref:
+            flags |= Qt.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        self.show()
+
+    # Allows switching your preference via the menu
+    def toggle_always_on_top(self):
+        """Toggles the user's preference and applies it if not currently punishing."""
+        self.always_on_top_pref = not self.always_on_top_pref
+        if not self.is_punishing:
+            self.apply_window_state()
 
     def load_image(self, image_path):
         """Loads and scales the pet image, or generates a colored box if missing."""
@@ -372,13 +385,13 @@ class DesktopPet(QLabel):
 
     # Same distraction hunter as OG window tracking
     def scan_for_distractions(self):
-        # Pet always returns on top even with forced-fullscreen games (like DELTARUNE)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.show()
-        self.raise_()
         found_distractions = get_active_distractions()
 
         if found_distractions:
+            # Moved Always on Top logic into the distraction trigger. Pet stays on top no matter what whenever a distraction is found
+            self.apply_window_state(force_top=True)
+            self.raise_()
+
             # Chose to print only titles since we know the platform from just that :DD
             titles_only = [item[1] for item in found_distractions]
             print(f"Active distractions: {titles_only}")
@@ -417,6 +430,8 @@ class DesktopPet(QLabel):
             if self.punish_bubble:
                 self.punish_bubble.deleteLater()
                 self.punish_bubble = None
+            # Revert window state when punishment ends. Always on Top preference stays the same
+            self.apply_window_state(force_top=False)
 
     # OG pet functions
     def gravity(self):
@@ -585,6 +600,12 @@ class DesktopPet(QLabel):
         review_action = QAction("Performance Review", self)
         review_action.triggered.connect(self.show_performance_review)
         menu.addAction(review_action)
+
+        # Added menu toggle for Always on Top flags
+        top_action = QAction("Always on Top", self, checkable=True)
+        top_action.setChecked(self.always_on_top_pref)
+        top_action.triggered.connect(self.toggle_always_on_top)
+        menu.addAction(top_action)
 
         menu.addSeparator()
 
