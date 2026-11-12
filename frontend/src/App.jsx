@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 // e.g. <Heart />. Common props: `size` (px), `color`, `strokeWidth`.
 import { Heart, Smile, Angry, ChevronRight } from "lucide-react";
 import {
-  LineChart,
+  ComposedChart,
+  Bar,
   Line,
   XAxis,
   YAxis,
@@ -12,6 +13,32 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+
+const API_URL = "http://127.0.0.1:8000";
+const REFRESH_MS = 5 * 60 * 1000; // How often to pull new stats from the pet
+const RETRY_MS = 5 * 1000; // How often to retry while the pet isn't reachable yet
+
+// Chart views. The pet logs activity in 5-minute buckets; the server groups them.
+const INTERVALS = [
+  {
+    id: "5min",
+    label: "5 minutes",
+    caption: "Last 6 hours, in 5-minute increments",
+    format: (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+  },
+  {
+    id: "day",
+    label: "Daily",
+    caption: "Last 30 days",
+    format: (d) => d.toLocaleDateString([], { month: "short", day: "numeric" }),
+  },
+  {
+    id: "month",
+    label: "Monthly",
+    caption: "Last 12 months",
+    format: (d) => d.toLocaleDateString([], { month: "short", year: "2-digit" }),
+  },
+];
 
 function App() {
   const [data, setData] = useState();
@@ -23,33 +50,43 @@ function App() {
     setExpanded((prev) => ({ ...prev, [source]: !prev[source] }));
 
   const [history, setHistory] = useState([]);
+  const [intervalId, setIntervalId] = useState("5min");
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const view = INTERVALS.find((i) => i.id === intervalId);
 
+  // Re-runs (and fetches right away) whenever the chart interval changes
   useEffect(() => {
-    if (!data) return;
-    const point = {
-      time: new Date().toLocaleTimeString(),
-      affection: data.total_affection_points ?? 0,
-      happiness: data.total_happiness_count ?? 0,
-      anger: data.total_anger_count ?? 0,
-    };
-    setHistory((prev) => [...prev, point].slice(-30));
-  }, [data]);
+    let timeoutId;
+    let connected = false;
+    let cancelled = false;
 
-  useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch("http://127.0.0.1:8000/");
-        setData(await response.json());
+        const [statsResponse, historyResponse] = await Promise.all([
+          fetch(`${API_URL}/`),
+          fetch(`${API_URL}/history?interval=${intervalId}`),
+        ]);
+        const stats = await statsResponse.json();
+        const points = await historyResponse.json();
+        if (cancelled) return;
+        setData(stats);
+        setHistory(points);
+        setLastUpdated(new Date());
+        connected = true;
       } catch (err) {
         console.error("Failed to fetch:", err);
       }
+      if (cancelled) return;
+      // Retry quickly until the pet is reachable, then refresh every 5 minutes
+      timeoutId = setTimeout(fetchData, connected ? REFRESH_MS : RETRY_MS);
     }
 
     fetchData();
-    const interval = setInterval(fetchData, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [intervalId]);
 
   if (!data) return <p style={styles.loading}>Connecting to Kurou Pet...</p>;
 
@@ -93,9 +130,19 @@ function App() {
   // Max value drives the bar widths. Math.max(1, ...) avoids dividing by zero.
   const maxSeconds = Math.max(1, ...sources.map((s) => s.totalSeconds));
 
+  const chartData = history.map((p) => ({ ...p, label: view.format(new Date(p.start)) }));
+  const hasActivity = history.some(
+    (p) => p.gained > 0 || p.lost > 0 || p.distracted_minutes > 0
+  );
+
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>Kurou Pet Dashboard</h1>
+      <p style={styles.subtitle}>
+        Last updated{" "}
+        {lastUpdated?.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        {" · "}refreshes every 5 minutes
+      </p>
 
       <div style={styles.grid}>
         {cards.map((c) => (
@@ -167,50 +214,87 @@ function App() {
       </div>
 
       <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Stats over time</h2>
-        {history.length === 0 ? (
-          <p style={styles.empty}>Collecting data...</p>
-        ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart
-              data={history}
-              margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#33334d" />
-              <XAxis dataKey="time" stroke="#888" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#888" tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  background: "#1a1a2e",
-                  border: "1px solid #33334d",
-                  borderRadius: 8,
+        <div style={styles.chartHeader}>
+          <div>
+            <h2 style={{ ...styles.sectionTitle, marginBottom: 4 }}>Activity over time</h2>
+            <p style={styles.empty}>{view.caption}</p>
+          </div>
+          <div style={styles.tabs} role="tablist">
+            {INTERVALS.map((i) => (
+              <button
+                key={i.id}
+                role="tab"
+                aria-selected={i.id === intervalId}
+                onClick={() => setIntervalId(i.id)}
+                style={{
+                  ...styles.tab,
+                  ...(i.id === intervalId ? styles.tabActive : {}),
                 }}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="affection"
-                stroke="#ff6b9d"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="happiness"
-                stroke="#ffd93d"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="anger"
-                stroke="#ff6b6b"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+              >
+                {i.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!hasActivity && (
+          <p style={{ ...styles.empty, marginBottom: 12 }}>
+            No activity recorded in this period yet. Bars fill in as you focus,
+            work out, and get distracted.
+          </p>
         )}
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#33334d" vertical={false} />
+            <XAxis
+              dataKey="label"
+              stroke="#888"
+              tick={{ fontSize: 11 }}
+              interval="preserveStartEnd"
+              minTickGap={24}
+            />
+            <YAxis yAxisId="points" stroke="#888" tick={{ fontSize: 11 }} allowDecimals={false} />
+            <YAxis
+              yAxisId="minutes"
+              orientation="right"
+              stroke="#888"
+              tick={{ fontSize: 11 }}
+              unit="m"
+            />
+            <Tooltip
+              cursor={{ fill: "rgba(255,255,255,0.05)" }}
+              contentStyle={{
+                background: "#1a1a2e",
+                border: "1px solid #33334d",
+                borderRadius: 8,
+              }}
+            />
+            <Legend />
+            <Bar
+              yAxisId="points"
+              dataKey="gained"
+              name="Affection earned"
+              fill="#6bcb77"
+              radius={[3, 3, 0, 0]}
+            />
+            <Bar
+              yAxisId="points"
+              dataKey="lost"
+              name="Affection lost"
+              fill="#ff6b6b"
+              radius={[3, 3, 0, 0]}
+            />
+            <Line
+              yAxisId="minutes"
+              type="monotone"
+              dataKey="distracted_minutes"
+              name="Minutes distracted"
+              stroke="#ffd93d"
+              strokeWidth={2}
+              dot={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
@@ -231,8 +315,15 @@ const styles = {
   },
   title: {
     textAlign: "center",
-    marginBottom: 32,
+    marginBottom: 4,
     fontSize: 32,
+  },
+  subtitle: {
+    textAlign: "center",
+    marginTop: 0,
+    marginBottom: 32,
+    fontSize: 14,
+    opacity: 0.6,
   },
   grid: {
     display: "grid",
@@ -273,6 +364,36 @@ const styles = {
   empty: {
     opacity: 0.6,
     margin: 0,
+  },
+  chartHeader: {
+    display: "flex",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+  },
+  tabs: {
+    display: "flex",
+    background: "#1a1a2e",
+    borderRadius: 8,
+    padding: 3,
+  },
+  tab: {
+    background: "transparent",
+    border: "none",
+    color: "inherit",
+    font: "inherit",
+    fontSize: 13,
+    padding: "6px 12px",
+    borderRadius: 6,
+    cursor: "pointer",
+    opacity: 0.7,
+  },
+  tabActive: {
+    background: "#262640",
+    opacity: 1,
+    fontWeight: 600,
   },
   sourceRow: {
     padding: "12px 0",

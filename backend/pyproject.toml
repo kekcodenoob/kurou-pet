@@ -1,16 +1,13 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Kurou Pet: a Windows desktop pet that rewards focused work and webcam-tracked exercise, with a FastAPI stats server for the React dashboard."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "tensorflow>=2.21.0",
     "opencv-python>=4.13.0.92",
     "numpy>=2.4.3",
-    "setuptools<70",
     "fastapi[standard]>=0.136.1",
-    "pillow>=12.1.1",
     "pyautogui>=0.9.54",
     "pyqt5>=5.15.11",
     "mediapipe",

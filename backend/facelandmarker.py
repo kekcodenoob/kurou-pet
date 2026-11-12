@@ -1,11 +1,6 @@
 import time
 from pathlib import Path
 
-# import os
-
-# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-# import tensorflow  # noqa: F401
-
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -33,6 +28,12 @@ class FaceTracker:
 
     # Returns true if the user successfully focused for the specified time, false if they lost all their focus points
     def start_timer(self, minutes):
+        # Fresh session: without this, one failed session left the score at 0
+        # and every later session failed immediately.
+        self.score = 100.0
+        self.blink_time = None
+        self.is_blink = False
+        self.latest_result = None
         self.focus_time = time.time() + minutes * 60
         return self.start()
 
@@ -49,7 +50,17 @@ class FaceTracker:
             result_callback=self.result_callback,
         )
         cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            cap.release()
+            return None  # No webcam, so the pet can say so instead of "you lost focus"
+        try:
+            return self._run(options, cap)
+        finally:
+            # Previously skipped on success/failure returns, leaving the webcam on
+            cap.release()
+            cv2.destroyAllWindows()
 
+    def _run(self, options, cap):
         with FaceLandmarker.create_from_options(options) as landmarker:
             while cap.isOpened():
                 if self.focus_time is None or time.time() >= self.focus_time:
@@ -59,10 +70,6 @@ class FaceTracker:
                     return False
 
                 self.score = max(0, self.score - 0.2)
-                print(f"score: {self.score:.2f}")
-
-                diff = self.focus_time - time.time() if self.focus_time else None
-                print(f"Time remaining: {diff:.2f} seconds" if diff else "No timer set")
 
                 ok, image = cap.read()
 
@@ -77,24 +84,16 @@ class FaceTracker:
                 timestamp_ms = int(time.time() * 1000)
                 landmarker.detect_async(mp_image, timestamp_ms)
 
-                h, w = image.shape[:2]  # get dimensions for landmark scaling
-
-                annotated_image = self.draw_landmarks_on_image(
-                    image, self.latest_result
-                )
-
                 if self.latest_result and self.latest_result.face_blendshapes:
                     self.plot_face_blendshapes_bar_graph(
                         self.latest_result.face_blendshapes[0]
                     )
 
-                # cv2.imshow("feed", annotated_image)
+                # Debug preview: cv2.imshow("feed", self.draw_landmarks_on_image(image, self.latest_result))
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
-
-            cap.release()
-            cv2.destroyAllWindows()
+        return False
 
     def result_callback(self, result, output_image, timestamp_ms):
 
@@ -167,42 +166,28 @@ class FaceTracker:
         # look_down_left & look_down_right > 0.65
         # look_up_left & look_up_right > 0.18
 
-        if (
+        looking_away = (
             look_right_score > 0.5
             or look_left_score > 0.5
             or look_up_left_score > 0.1
             or look_up_right_score > 0.1
             or self.is_blink
-        ):
-            # if (look_down_right or look_left or look_down_left or look_down_right or look_up_left or look_up_right) and category.score > 0.65:
-            #     # print(f"{category.category_name} score: {category.score}")
-            #     # is_forward = Falseß
-            #     #print(f"score: {category.score}")
-            print("LOOK FORWARD")
-
-        else:
-            #     #print(f" ")
+        )
+        if not looking_away:
             self.score = min(100, self.score + 0.8)
 
-        # print(f"score: {self.score:.2f}")
-
-        # checks if blink is detected and compares if it has been for 2+ seconds
+        # Eyes closed for 2+ seconds counts as looking away
         if blink_left_score > 0.3 and blink_right_score > 0.3:
             if self.blink_time is None:  # when its the first time checking
                 self.blink_time = time.time()  # saves the current time to blink_time
             elif time.time() - self.blink_time >= 2:
-                print("youve been looking away for 3 seconds!")
                 self.is_blink = True
-
         else:
             self.blink_time = None
-            print(":)")
             self.is_blink = False
 
     def get_score(self):
         return self.score
-
-    # print("FaceLandmarker detector initialized successfully.")
 
 
 face_tracker = FaceTracker()

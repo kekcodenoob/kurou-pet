@@ -17,61 +17,116 @@ improving your physical fitness. In Kurou Pet you're rewarded for staying
 focused on work and taking breaks to exercise. You can then use those rewards to
 take care of your Kurou Pet!
 
+> **Platform:** Kurou Pet runs on **Windows only** (x64). The window tracking,
+> focus switching, and dependency lockfile all target Windows.
+
 ## Features
 
-- Face tracking with Mediapipe Landmark
-- Kurou Pet System
-- Movenet Pose tracking for exercise detection
+- Kurou Pet System: affection points, unlockable pet models, and reactions to
+  how you spend your time
+- Focus Mode: timed focus sessions scored with MediaPipe Face Landmarker
+  through your webcam (looking away or closing your eyes drains the score)
+- Focus App: pick the app the pet pulls you back to from its right-click menu
+  (saved between sessions)
+- Workouts: pick an exercise from the pet's menu (push-ups, squats, lunges,
+  curls, presses, raises, rows, crunches and more) and the webcam counts your
+  reps with MediaPipe pose tracking, grading each rep's form; every rep earns
+  affection, with more for good form
 - Window & tab activity tracking
+- Dashboard: affection earned and lost and minutes distracted, charted in
+  5-minute, daily, and monthly increments (refreshes every 5 minutes)
 
 ### Window Tracking
 
 Kurou Pet keeps an eye on what you're actually doing on your machine so the pet
-can react to it. The tracker enumerates open windows on a regular interval and
-classifies each one — work apps, games, and known social media / video sites
-(YouTube, Twitter, Reddit, TikTok, etc) are recognized by window title and
-class name. Time spent on distraction windows is logged per source and per tab,
+can react to it. Every few seconds the tracker checks the window you're
+currently using: games and known social media / video sites (YouTube, Twitter,
+Reddit, TikTok, etc) are recognized by window title. Distractions left open in
+the background don't count; the pet only gets angry when you switch to one. Time spent on distraction windows is logged per source and per tab,
 which is what populates the dashboard.
 
 ## Repository Layout
 
 - `/backend`
   - `main.py` - The entrypoint
-  - `facelandmarker.py` - Face tracking with Mediapipe
-  - `movenet.py` - Body tracking push up counter with Movenet
+  - `facelandmarker.py` - Face tracking focus score for Focus Mode
+  - `exercise_tracker.py` - Webcam rep counting and form checks with MediaPipe Pose
   - `pet_window_tracking.py` - Kurou Pet backend code
+  - `history.py` - Timestamped activity log behind the dashboard charts (saved to `pet_history.db`)
 
 - `/frontend`
   - `src/App.jsx` - Dashboard to visualize data from the backend
 
 ## Running Locally
 
-### Backend
+### Requirements
 
-```console
-cd backend
-```
+- Windows 10/11 (x64)
+- [uv](https://docs.astral.sh/uv/) (installs Python and the backend dependencies)
+- [Node.js](https://nodejs.org/) (to build the dashboard)
+- A webcam (for Focus Mode and workout tracking)
 
-```console
-uv run main.py
-```
+### 1. Build the dashboard (once)
 
-### Frontend
+Run this the first time, and again whenever the frontend code changes:
 
 ```console
 cd frontend
+npm install
+npm run build
 ```
 
+### 2. Start Kurou Pet
+
+Run this every time you want to use the app:
+
 ```console
-npm install
+cd backend
+uv run main.py
+```
+
+The pet appears in the bottom-right corner of your screen. Right-click it for
+the menu, then choose **Focus App** to pick the app it should send you back to.
+
+### 3. Open the dashboard
+
+Right-click the pet and choose **Open Dashboard**, or go to
+<http://127.0.0.1:8000/dashboard/> while the pet is running.
+
+### Working on the dashboard
+
+For live reload while editing the frontend, run the Vite dev server alongside
+the pet:
+
+```console
+cd frontend
 npm run dev
 ```
 
+**Open Dashboard** uses the dev server (<http://localhost:5173/>) automatically
+while it's running.
+
+### Testing shortcuts
+
+The bottom of the pet's right-click menu has two shortcuts for testing:
+
+- **Test: Focus for 10 seconds** runs a full Focus Mode session in 10 seconds.
+- **Test: Unlock all models** unlocks every pet model without spending points.
+
 ## Future Improvements
 
-- **Expanded Exercise Library** — Scaling Movenet capabilities beyond push-ups
-  to track squats, stretching, and mobility routines.
+- **Stretching & Mobility** — Extending the workout tracker to timed holds,
+  stretches, and multi-exercise routines.
 - **Pet Evolution Mechanics** — Introducing dynamic visual upgrades and
   lifecycles for the pet based on long-term user focus streaks.
 - **Community Aspect** — Allowing stats to be shareable across users to
   encourage them to work hard like their peers.
+
+## Credits
+
+The workout tracker (`backend/exercise_tracker.py`) is adapted from the camera
+app Kelvin Osei wrote for [Arc](https://github.com/swejasonzhang/Hackknight2026),
+a Hack Knights 2026 project (`computer-vision/movements.py`): its exercise
+catalog, rep counting, form grading, and fatigue checks, ported to MediaPipe's
+PoseLandmarker task. Pose and face tracking use Google's
+[MediaPipe](https://ai.google.dev/edge/mediapipe) models.
