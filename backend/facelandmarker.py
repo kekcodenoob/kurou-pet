@@ -18,6 +18,17 @@ VisionRunningMode = mp.tasks.vision.RunningMode
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "face_landmarker.task"
 
+# Scoring is time-based so it doesn't depend on the webcam's frame rate.
+# Looking away for FULL_DRAIN_SECONDS straight fails a session (half the session
+# for very short ones, so the 10-second test can fail too); looking back recovers.
+FULL_DRAIN_SECONDS = 20.0
+RECOVERY_PER_SECOND = 10.0
+MAX_HEAD_TURN_DEGREES = 30.0  # Head turned further than this from the camera counts as away
+EYES_CLOSED_SECONDS = 2.0
+# Every this many seconds spent looking away (added up over the session) is
+# reported through `on_distracted`
+DISTRACTION_SECONDS = 1.0
+
 
 class FaceTracker:
     latest_result = None
@@ -27,7 +38,9 @@ class FaceTracker:
     is_blink = False
 
     # Returns true if the user successfully focused for the specified time, false if they lost all their focus points
-    def start_timer(self, minutes):
+    def start_timer(self, minutes, on_distracted=None):
+        """`on_distracted(seconds)` is called (from this worker thread) for every
+        DISTRACTION_SECONDS spent looking away."""
         # Fresh session: without this, one failed session left the score at 0
         # and every later session failed immediately.
         self.score = 100.0
@@ -35,6 +48,9 @@ class FaceTracker:
         self.is_blink = False
         self.latest_result = None
         self.focus_time = time.time() + minutes * 60
+        self.drain_per_second = 100.0 / min(FULL_DRAIN_SECONDS, minutes * 60 / 2)
+        self.away_seconds = 0.0
+        self.on_distracted = on_distracted
         return self.start()
 
     def start(self):
@@ -47,6 +63,7 @@ class FaceTracker:
             min_face_presence_confidence=0.5,
             min_tracking_confidence=0.5,
             output_face_blendshapes=True,
+            output_facial_transformation_matrixes=True,  # Head direction
             result_callback=self.result_callback,
         )
         cap = cv2.VideoCapture(0)
@@ -62,14 +79,31 @@ class FaceTracker:
 
     def _run(self, options, cap):
         with FaceLandmarker.create_from_options(options) as landmarker:
+            last_frame = time.time()
             while cap.isOpened():
-                if self.focus_time is None or time.time() >= self.focus_time:
+                now = time.time()
+                if self.focus_time is None or now >= self.focus_time:
                     return True
 
                 if self.score <= 0:
+                    # Round leftover time to the nearest second, so failing right at
+                    # a second mark doesn't lose that one to timing
+                    if self.on_distracted and self.away_seconds >= DISTRACTION_SECONDS / 2:
+                        self.on_distracted(DISTRACTION_SECONDS)
                     return False
 
-                self.score = max(0, self.score - 0.2)
+                elapsed, last_frame = now - last_frame, now
+                if self.latest_result is None:
+                    pass  # Model still warming up; don't count it against the user
+                elif self.is_focused():
+                    self.score = min(100.0, self.score + RECOVERY_PER_SECOND * elapsed)
+                else:
+                    self.score = max(0.0, self.score - self.drain_per_second * elapsed)
+                    self.away_seconds += elapsed
+                    if self.away_seconds >= DISTRACTION_SECONDS:
+                        self.away_seconds -= DISTRACTION_SECONDS
+                        if self.on_distracted:
+                            self.on_distracted(DISTRACTION_SECONDS)
 
                 ok, image = cap.read()
 
@@ -83,11 +117,6 @@ class FaceTracker:
                 # Timestamp in milliseconds
                 timestamp_ms = int(time.time() * 1000)
                 landmarker.detect_async(mp_image, timestamp_ms)
-
-                if self.latest_result and self.latest_result.face_blendshapes:
-                    self.plot_face_blendshapes_bar_graph(
-                        self.latest_result.face_blendshapes[0]
-                    )
 
                 # Debug preview: cv2.imshow("feed", self.draw_landmarks_on_image(image, self.latest_result))
                 key = cv2.waitKey(1) & 0xFF
@@ -146,7 +175,18 @@ class FaceTracker:
 
         return annotated_image
 
-    def plot_face_blendshapes_bar_graph(self, face_blendshapes):
+    def is_focused(self):
+        """True if a face is in view, facing the screen, with eyes on it and open."""
+        result = self.latest_result
+        if not result or not result.face_blendshapes:
+            return False  # No face found: the user left or turned away
+        if result.facial_transformation_matrixes and head_turn_degrees(
+            result.facial_transformation_matrixes[0]
+        ) > MAX_HEAD_TURN_DEGREES:
+            return False
+        return not self.eyes_looking_away(result.face_blendshapes[0])
+
+    def eyes_looking_away(self, face_blendshapes):
 
         # creates a dictionary for face blendshape
         scores = {c.category_name: c.score for c in face_blendshapes}
@@ -166,28 +206,33 @@ class FaceTracker:
         # look_down_left & look_down_right > 0.65
         # look_up_left & look_up_right > 0.18
 
-        looking_away = (
+        # Eyes closed for 2+ seconds counts as looking away
+        if blink_left_score > 0.3 and blink_right_score > 0.3:
+            if self.blink_time is None:  # when its the first time checking
+                self.blink_time = time.time()  # saves the current time to blink_time
+            elif time.time() - self.blink_time >= EYES_CLOSED_SECONDS:
+                self.is_blink = True
+        else:
+            self.blink_time = None
+            self.is_blink = False
+
+        return (
             look_right_score > 0.5
             or look_left_score > 0.5
             or look_up_left_score > 0.1
             or look_up_right_score > 0.1
             or self.is_blink
         )
-        if not looking_away:
-            self.score = min(100, self.score + 0.8)
-
-        # Eyes closed for 2+ seconds counts as looking away
-        if blink_left_score > 0.3 and blink_right_score > 0.3:
-            if self.blink_time is None:  # when its the first time checking
-                self.blink_time = time.time()  # saves the current time to blink_time
-            elif time.time() - self.blink_time >= 2:
-                self.is_blink = True
-        else:
-            self.blink_time = None
-            self.is_blink = False
 
     def get_score(self):
         return self.score
+
+
+def head_turn_degrees(transform):
+    """Angle between the way the face points and the camera's axis (0 = facing it)."""
+    # abs(): works whether the face model points along +z or -z
+    facing = np.clip(abs(np.asarray(transform)[2, 2]), 0.0, 1.0)
+    return float(np.degrees(np.arccos(facing)))
 
 
 face_tracker = FaceTracker()

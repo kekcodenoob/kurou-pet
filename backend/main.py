@@ -42,6 +42,12 @@ def get_history(interval: Literal["5min", "day", "month"] = "5min"):
     return history.series(interval)
 
 
+@app.get("/workouts")
+def get_workouts():
+    """Workout totals per exercise and the most recent sessions."""
+    return history.workouts()
+
+
 # Serve the built React dashboard (frontend/dist, from `npm run build`) at /dashboard/
 if DASHBOARD_DIST.is_dir():
     app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIST, html=True), name="dashboard")

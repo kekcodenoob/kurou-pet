@@ -3,12 +3,10 @@ import math
 import time
 import random
 import threading
-import pyautogui
 import os
 import json
 import socket
 from pathlib import Path
-import pywinctl as pwc
 import webbrowser
 from PyQt5.QtWidgets import QApplication, QLabel, QMenu, QWidget, qApp
 from PyQt5.QtCore import Qt, QTimer, QPoint, QPointF, QRect, QRectF, pyqtSignal
@@ -26,6 +24,63 @@ from PyQt5.QtGui import (
 from facelandmarker import face_tracker
 from history import DISTRACTED, GAINED, LOST, History
 from exercise_tracker import EXERCISE_CATEGORIES, EXERCISES, workout
+from desktop_windows import focus_keeper, get_active_distractions, list_open_apps
+
+
+# Focus Mode timers: (label, minutes)
+FOCUS_TIMES = [
+    ("5 minutes", 5),
+    ("15 minutes", 15),
+    ("30 minutes", 30),
+    ("1 hour", 60),
+]
+TEST_FOCUS_TIME = ("10 seconds", 10 / 60)  # Quick session for testing, at the bottom of the menu
+FOCUS_LABELS = {minutes: label for label, minutes in FOCUS_TIMES + [TEST_FOCUS_TIME]}
+
+FOCUS_SUCCESS, FOCUS_FAILED, FOCUS_NO_CAMERA = 1, 0, -1
+# Every 5-second scan on a distracting window, and every second spent looking
+# away during Focus Mode, costs this much affection and happiness and adds this
+# much anger. Affection has no floor, so it can go negative.
+DISTRACTION_PENALTY = 1
+LOOKED_AWAY_REMINDER_SECONDS = 5  # The pet speaks up once per this many seconds looking away
+LOOKING_AWAY = "Looking away"  # Anger source name for Focus Mode distractions
+
+
+def focus_reward(minutes):
+    # About 1 affection point per 5 seconds focused (15 minutes -> 180)
+    return max(1, round(minutes * 12))
+
+
+def migrate_happiness_causes(causes):
+    """Converts the old flat {"• Pet the pet": count} format to the per-source format.
+
+    The old format only counted events, so points are estimated from the rewards.
+    """
+    if all(isinstance(v, dict) for v in causes.values()):
+        return causes
+    migrated = {}
+
+    def add(source, detail, points):
+        entry = migrated.setdefault(source, {"Total points": 0, "Breakdown": {}})
+        entry["Total points"] += points
+        entry["Breakdown"][detail] = entry["Breakdown"].get(detail, 0) + points
+
+    for name, value in causes.items():
+        if isinstance(value, dict):
+            migrated[name] = value
+            continue
+        label = name.lstrip("• ").strip()
+        if label == "Pet the pet":
+            add("Petting", "Pet the pet", value)
+        elif label.startswith("Adequately focused for "):
+            session = label.removeprefix("Adequately focused for ")
+            minutes = next((m for m, l in FOCUS_LABELS.items() if l == session), 0)
+            add("Focus Mode", session, value * focus_reward(minutes) if minutes else value)
+        elif label == "Completed a workout rep":
+            add("Workouts", "Earlier workouts", value * 2)  # Exercise and form weren't logged
+        else:
+            add("Other", label, value)
+    return migrated
 
 
 # Getting info from the pet to display on the FastAPI server
@@ -73,7 +128,7 @@ class PetStatus:
                     self.unlocked_sprites = data.get("unlocked_sprites", ["roach.webp"])
                     self.affection_points = data.get("affection_points", 0)
                     self.happiness_count = data.get("happiness_count", 0)
-                    self.happiness_causes = data.get("happiness_causes", {})
+                    self.happiness_causes = migrate_happiness_causes(data.get("happiness_causes", {}))
                     self.anger_count = data.get("anger_count", 0)
                     self.anger_causes = data.get("anger_causes", {})
                     self.productivity_app = data.get("productivity_app")
@@ -84,15 +139,19 @@ class PetStatus:
             except Exception as e:
                 print(f"Error loading save file: {e}")
 
-    def increment_anger(self, cause=None):
-        self.affection_points -= 1
-        self.anger_count += 1
-        history.record(LOST, 1, cause)
+    def increment_anger(self, cause=None, amount=1):
+        """Takes `amount` affection and happiness and adds `amount` anger."""
+        self.affection_points -= amount
+        self.happiness_count = max(0, self.happiness_count - amount)
+        self.anger_count += amount
+        history.record(LOST, amount, cause)
 
-    def increment_happiness(self, happy_amount=1, cause=None):
+    def increment_happiness(self, happy_amount=1, source="Other", detail=None):
+        """Adds affection and logs where it came from, e.g. ("Workouts", "Bicep Curls")."""
         self.affection_points += happy_amount
         self.happiness_count += happy_amount
-        history.record(GAINED, happy_amount, cause)
+        self.find_happiness_causes(source, detail or source, happy_amount)
+        history.record(GAINED, happy_amount, f"{source}: {detail}" if detail else source)
 
     def get_affection_points(self):
         return self.affection_points
@@ -129,172 +188,17 @@ class PetStatus:
     def get_happiness_count(self):
         return self.happiness_count
 
-    def find_happiness_causes(self, happiness_source):
-        for joy in happiness_source:
-            if joy in self.happiness_causes:
-                self.happiness_causes[joy] += 1
-            else:
-                self.happiness_causes[joy] = 1
+    def find_happiness_causes(self, source, detail, points):
+        # Mirrors anger_causes: one entry per source ("Workouts", "Focus Mode", "Petting")
+        # with its total and a breakdown, e.g. {"Total points": 30, "Breakdown": {"Bicep Curls": 30}}
+        entry = self.happiness_causes.setdefault(source, {"Total points": 0, "Breakdown": {}})
+        entry["Total points"] += points
+        entry["Breakdown"][detail] = entry["Breakdown"].get(detail, 0) + points
         return self.happiness_causes
 
 
 history = History()
 pet_status = PetStatus()
-
-
-# Window tracking stuff
-# Background/system processes that own windows but aren't something you'd work in
-IGNORED_APPS = {
-    "explorer.exe",
-    "textinputhost.exe",
-    "applicationframehost.exe",
-    "systemsettings.exe",
-    "shellexperiencehost.exe",
-    "searchhost.exe",
-    "startmenuexperiencehost.exe",
-    "lockapp.exe",
-    os.path.basename(sys.executable).lower(),  # The pet itself
-}
-
-
-def list_open_apps():
-    """Returns {process name: main window title} for apps that have a titled window."""
-    try:
-        apps = pwc.getAllAppsWindowsTitles()
-    except Exception as e:
-        print(f"App scan error: {e}")
-        return {}
-
-    open_apps = {}
-    for app_name, titles in apps.items():
-        if app_name.lower() in IGNORED_APPS:
-            continue
-        main_title = next((t for t in titles if t.strip()), None)
-        if main_title:
-            open_apps[app_name] = main_title
-    return open_apps
-
-
-_focus_window_cache = {}  # app name -> pywinctl Window, so we don't rescan every 5s
-
-
-def _find_app_window(app_name):
-    cached = _focus_window_cache.get(app_name)
-    if cached is not None and cached.isAlive:
-        return cached
-
-    titles = pwc.getAllAppsWindowsTitles().get(app_name, [])
-    for title in titles:
-        if not title.strip():
-            continue
-        windows = pwc.getWindowsWithTitle(title)
-        if windows:
-            _focus_window_cache[app_name] = windows[0]
-            return windows[0]
-    return None
-
-
-def focus_keeper(app_name):
-    # Brings the user's focus app to the foreground if it's open.
-    # Windows only lets a process steal focus after a keypress, so tap Alt first.
-    pyautogui.press("alt")
-
-    try:
-        target = _find_app_window(app_name)
-        if target is None:
-            print(f"Couldn't focus '{app_name}'. It may not be open.")
-            return
-        if target.isMinimized:
-            target.restore()
-        target.activate()
-    except Exception as e:
-        _focus_window_cache.pop(app_name, None)
-        print(f"Focus error: {e}")
-
-
-def get_active_distractions():
-    # Checks whether the focused window is a game or social media, by its title.
-    game_title = [
-        "Steam",
-        "Launcher",
-        "v1.0",
-        "Early Access",
-        "Alpha",
-        "Beta",
-        "Made with Unity",
-        "Unreal Engine",
-        "CryEngine",
-        "DEMO",
-        "Loading Bay",
-        "DELTARUNE",
-    ]
-    social_title = [
-        "Facebook",
-        "Twitter",
-        "Instagram",
-        "Reddit",
-        "r/",
-        "YouTube",
-        "Netflix",
-        "TikTok",
-        "Twitch",
-        "Pinterest",
-    ]
-
-    # Only the window the user is looking at counts; distractions left open
-    # in the background are fine.
-    try:
-        active_title = pwc.getActiveWindowTitle()
-    except Exception as e:
-        print(f"Window scan error: {e}")
-        return []
-
-    found_distractions = []
-    for title in [active_title]:
-        if not title:
-            continue
-        lowered = title.lower()
-
-        # Trying to match Tabs to their general platforms
-        matched_platform = None
-        for keyword in game_title:
-            if keyword.lower() in lowered:
-                if keyword == "Launcher":
-                    matched_platform = "Game Launcher"
-                else:
-                    matched_platform = keyword
-                break
-        if not matched_platform:
-            for keyword in social_title:
-                if keyword.lower() in lowered:
-                    if keyword == "r/":  # r/ was weird so I replaced its displayed name
-                        matched_platform = "Reddit"
-                    else:
-                        matched_platform = keyword
-                    break
-        # Add platform and specific window name to distractions
-        if matched_platform:
-            found_distractions.append((matched_platform, title))
-
-    return found_distractions
-
-
-# Focus Mode timers: (label, minutes)
-FOCUS_TIMES = [
-    ("5 minutes", 5),
-    ("15 minutes", 15),
-    ("30 minutes", 30),
-    ("1 hour", 60),
-]
-TEST_FOCUS_TIME = ("10 seconds", 10 / 60)  # Quick session for testing, at the bottom of the menu
-FOCUS_LABELS = {minutes: label for label, minutes in FOCUS_TIMES + [TEST_FOCUS_TIME]}
-
-FOCUS_SUCCESS, FOCUS_FAILED, FOCUS_NO_CAMERA = 1, 0, -1
-
-
-def focus_reward(minutes):
-    # About 1 affection point per 5 seconds focused (15 minutes -> 180)
-    return max(1, round(minutes * 12))
 
 
 WORKOUT_REPS = 10
@@ -357,8 +261,14 @@ DIALOGUE = {
     "focus_start": "Focus mode: {label}. Eyes on your work!",
     "focus_success": "You stayed focused for {label}! +{points} affection",
     "focus_fail": [
-        "You drifted off that time. Let's try again soon.",
-        "Focus slipped. No worries, go another round.",
+        "You looked away too long! That focus session is a bust.",
+        "Hey! You were supposed to be focusing! No reward this time.",
+        "I saw that. Eyes off the screen means no reward.",
+    ],
+    "focus_looked_away": [
+        "Eyes on your work! -{points} affection this session",
+        "I'm watching you! Look back at the screen. -{points} affection this session",
+        "Where are you looking? Focus! -{points} affection this session",
     ],
     "no_camera": "I couldn't open your webcam.",
     "camera_busy": "I'm already watching the camera!",
@@ -474,16 +384,19 @@ class SpeechBubble(QWidget):
 class DesktopPet(QLabel):
     # Emitted from camera worker threads; Qt delivers them on the UI thread
     focus_session_done = pyqtSignal(float, int)  # minutes, FOCUS_* result
+    focus_distracted = pyqtSignal(float, str)  # seconds looked away, session label
     workout_done = pyqtSignal(object)  # exercise_tracker.WorkoutResult
     camera_session_ended = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)  # Never take focus from the user's window
         self._on_top_applied = None
 
         self.camera_busy = False  # Only one webcam session (focus or workout) at a time
         self.focus_session_done.connect(self.on_focus_session_done)
+        self.focus_distracted.connect(self.on_focus_distracted)
         self.workout_done.connect(self.on_workout_done)
         self.camera_session_ended.connect(self.on_camera_session_ended)
 
@@ -528,6 +441,7 @@ class DesktopPet(QLabel):
         self.scan_timer = QTimer(self)
         self.scan_timer.timeout.connect(self.scan_for_distractions)
         self.scan_timer.start(5000)
+        self.focus_away_seconds = 0  # Seconds spent looking away in the current Focus Mode session
 
         self.chatter_timer = QTimer(self)
         self.chatter_timer.timeout.connect(self.idle_chatter)
@@ -542,7 +456,14 @@ class DesktopPet(QLabel):
         if on_top == self._on_top_applied:
             return  # setWindowFlags hides the window, so skip it when nothing changed
         self._on_top_applied = on_top
-        flags = Qt.FramelessWindowHint | Qt.Tool | Qt.NoDropShadowWindowHint
+        # WindowDoesNotAcceptFocus: clicking or raising the pet must never take focus
+        # from the user's window, or the distraction check would see the pet instead
+        flags = (
+            Qt.FramelessWindowHint
+            | Qt.Tool
+            | Qt.NoDropShadowWindowHint
+            | Qt.WindowDoesNotAcceptFocus
+        )
         if on_top:
             flags |= Qt.WindowStaysOnTopHint
         pos = self.pos()
@@ -764,7 +685,14 @@ class DesktopPet(QLabel):
 
     # Distraction tracking
     def scan_for_distractions(self):
+        # The pet's right-click menu takes focus while open, so the active window says
+        # nothing about what the user is doing. Keep the current mood until it closes.
+        if QApplication.activePopupWidget():
+            return
+
         found_distractions = get_active_distractions()
+        if found_distractions is None:
+            return  # The pet's own window is active; same as above
 
         if not found_distractions:
             self.stop_punishment()
@@ -777,7 +705,7 @@ class DesktopPet(QLabel):
         titles_only = [item[1] for item in found_distractions]
         print(f"Active distractions: {titles_only}")
         pet_status.find_anger_causes(found_distractions)
-        pet_status.increment_anger(cause=found_distractions[0][0])
+        pet_status.increment_anger(cause=found_distractions[0][0], amount=DISTRACTION_PENALTY)
 
         if not self.is_punishing:
             self.is_punishing = True
@@ -859,8 +787,7 @@ class DesktopPet(QLabel):
             return
         self.say(random.choice(DIALOGUE["petted"]), "happy")
         self.hop()
-        pet_status.find_happiness_causes(["• Pet the pet"])
-        pet_status.increment_happiness(cause="Pet the pet")
+        pet_status.increment_happiness(source="Petting", detail="Pet the pet")
 
     def pet_right_click(self, global_pos):
         menu = QMenu(self)
@@ -964,9 +891,9 @@ class DesktopPet(QLabel):
         app_menu.addSeparator()
 
         open_apps = list_open_apps()
-        # Keep showing the saved choice even if that app is closed right now
+        # Keep showing the saved choice even if it has no usable window right now
         if current and current not in open_apps:
-            open_apps[current] = "not open"
+            open_apps[current] = "no work window open"
 
         for app_name, title in sorted(open_apps.items(), key=lambda kv: kv[0].lower()):
             short_title = title if len(title) <= 40 else title[:37] + "..."
@@ -1024,9 +951,14 @@ class DesktopPet(QLabel):
             self.say(DIALOGUE["camera_busy"])
             return
         self.say(DIALOGUE["focus_start"].format(label=label))
+        self.focus_away_seconds = 0
 
         def run():
-            result = face_tracker.start_timer(minutes)
+            # The tracker reports looking away from its worker thread; the signal
+            # hands it to the UI thread
+            result = face_tracker.start_timer(
+                minutes, on_distracted=lambda seconds: self.focus_distracted.emit(seconds, label)
+            )
             if result is None:
                 status = FOCUS_NO_CAMERA
             else:
@@ -1039,15 +971,43 @@ class DesktopPet(QLabel):
         label = FOCUS_LABELS.get(minutes, f"{minutes:g} minutes")
         if status == FOCUS_SUCCESS:
             points = focus_reward(minutes)
-            pet_status.find_happiness_causes([f"• Adequately focused for {label}"])
-            pet_status.increment_happiness(points, cause=f"Focus Mode ({label})")
+            pet_status.increment_happiness(points, source="Focus Mode", detail=label)
             pet_status.save_to_file()
             self.say(DIALOGUE["focus_success"].format(label=label, points=points), "happy")
             self.hop()
         elif status == FOCUS_NO_CAMERA:
             self.say(DIALOGUE["no_camera"])
         else:
-            self.say(random.choice(DIALOGUE["focus_fail"]))
+            self.fail_focus(label)
+
+    def on_focus_distracted(self, seconds, label):
+        """Every second spent looking away during Focus Mode costs a point."""
+        seconds = int(seconds)
+        pet_status.find_anger_causes([(LOOKING_AWAY, f"Focus Mode ({label})")], increment_num=seconds)
+        pet_status.increment_anger(cause=LOOKING_AWAY, amount=DISTRACTION_PENALTY * seconds)
+        pet_status.save_to_file()
+        # Speak up every few seconds rather than every second, so the bubble isn't spammed
+        before = self.focus_away_seconds
+        self.focus_away_seconds += seconds
+        if before // LOOKED_AWAY_REMINDER_SECONDS != self.focus_away_seconds // LOOKED_AWAY_REMINDER_SECONDS:
+            self.say(
+                random.choice(DIALOGUE["focus_looked_away"]).format(
+                    points=DISTRACTION_PENALTY * self.focus_away_seconds
+                ),
+                "angry",
+                duration_ms=4000,
+            )
+
+    def fail_focus(self, label):
+        # Same angry reaction as being poked too much: red bubble, stops in place.
+        # The looking-away penalties were already taken; failing just loses the reward.
+        self.is_annoyed = True
+        self.walk_remaining = 0
+        self.say(random.choice(DIALOGUE["focus_fail"]), "angry", duration_ms=5000, force=True)
+        failed = pet_status.anger_causes.setdefault("Focus Mode", {"Failed sessions": 0})
+        failed["Failed sessions"] += 1
+        pet_status.save_to_file()
+        QTimer.singleShot(5000, self.calm_down)
 
     def start_workout(self, exercise_id):
         if self.camera_busy:
@@ -1068,6 +1028,7 @@ class DesktopPet(QLabel):
         self.start_camera_session(run)
 
     def on_workout_done(self, result):
+        history.record_workout(result)
         details = {
             "reps": result.reps,
             "exercise": result.exercise.lower(),

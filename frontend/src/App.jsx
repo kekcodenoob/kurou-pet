@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 // Each icon from lucide-react is its own React component you use like a custom tag,
 // e.g. <Heart />. Common props: `size` (px), `color`, `strokeWidth`.
-import { Heart, Smile, Angry, ChevronRight } from "lucide-react";
+import { Heart, Smile, Angry, ChevronRight, Dumbbell } from "lucide-react";
 import {
   ComposedChart,
+  BarChart,
   Bar,
   Line,
   XAxis,
@@ -50,6 +51,7 @@ function App() {
     setExpanded((prev) => ({ ...prev, [source]: !prev[source] }));
 
   const [history, setHistory] = useState([]);
+  const [workouts, setWorkouts] = useState(null);
   const [intervalId, setIntervalId] = useState("5min");
   const [lastUpdated, setLastUpdated] = useState(null);
   const view = INTERVALS.find((i) => i.id === intervalId);
@@ -62,15 +64,18 @@ function App() {
 
     async function fetchData() {
       try {
-        const [statsResponse, historyResponse] = await Promise.all([
+        const [statsResponse, historyResponse, workoutsResponse] = await Promise.all([
           fetch(`${API_URL}/`),
           fetch(`${API_URL}/history?interval=${intervalId}`),
+          fetch(`${API_URL}/workouts`),
         ]);
         const stats = await statsResponse.json();
         const points = await historyResponse.json();
+        const workoutStats = await workoutsResponse.json();
         if (cancelled) return;
         setData(stats);
         setHistory(points);
+        setWorkouts(workoutStats);
         setLastUpdated(new Date());
         connected = true;
       } catch (err) {
@@ -113,22 +118,13 @@ function App() {
     },
   ];
 
-  // Group by source: one entry per site (e.g. "YouTube"), with its total time
+  // Time per source: one entry per site (e.g. "YouTube"), with its total time
   // and a nested list of individual tabs to show when expanded.
   // We only keep sources that have a `Tabs` object — other shapes are ignored.
-  const sources = Object.entries(data.source_of_anger || {})
-    .filter(([, info]) => info.Tabs)
-    .map(([source, info]) => ({
-      source,
-      totalSeconds: info["Total seconds"] || 0,
-      tabs: Object.entries(info.Tabs)
-        .map(([title, seconds]) => ({ title, seconds }))
-        .sort((a, b) => b.seconds - a.seconds),
-    }))
-    .sort((a, b) => b.totalSeconds - a.totalSeconds);
+  const distractionSources = toSourceRows(data.source_of_anger, "Total seconds", "Tabs");
 
-  // Max value drives the bar widths. Math.max(1, ...) avoids dividing by zero.
-  const maxSeconds = Math.max(1, ...sources.map((s) => s.totalSeconds));
+  // Affection per source: same shape, e.g. "Workouts" -> { "Bicep Curls": 30 }
+  const affectionSources = toSourceRows(data.source_of_happiness, "Total points", "Breakdown");
 
   const chartData = history.map((p) => ({ ...p, label: view.format(new Date(p.start)) }));
   const hasActivity = history.some(
@@ -157,61 +153,27 @@ function App() {
         ))}
       </div>
 
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>Time per source</h2>
-        {sources.length === 0 ? (
-          <p style={styles.empty}>No tab activity yet.</p>
-        ) : (
-          sources.map((s) => {
-            const isOpen = !!expanded[s.source];
-            return (
-              <div key={s.source} style={styles.sourceRow}>
-                {/* The clickable header. A <button> is the right element for
-                    "click to do something" — it's keyboard-accessible by default. */}
-                <button
-                  onClick={() => toggle(s.source)}
-                  style={styles.sourceButton}
-                >
-                  <ChevronRight
-                    size={18}
-                    style={{
-                      ...styles.chevron,
-                      // Rotate the arrow when expanded. Pure CSS — no extra icon needed.
-                      transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
-                    }}
-                  />
-                  <span style={styles.sourceName}>{s.source}</span>
-                  <span style={styles.sourceSeconds}>{s.totalSeconds}s</span>
-                </button>
+      <SourceList
+        title="Affection per source"
+        rows={affectionSources}
+        unit=" pts"
+        color="#6bcb77"
+        emptyText="No affection earned yet. Focus, work out, or pet your pet."
+        expanded={expanded}
+        toggle={toggle}
+        keyPrefix="affection"
+      />
 
-                <div style={styles.tabBarTrack}>
-                  <div
-                    style={{
-                      ...styles.tabBarFill,
-                      width: `${(s.totalSeconds / maxSeconds) * 100}%`,
-                    }}
-                  />
-                </div>
-
-                {/* `&&` short-circuit: if isOpen is false, nothing renders.
-                    A common React pattern for "show this only when..." */}
-                {isOpen && (
-                  <div style={styles.tabList}>
-                    {s.tabs.map((t) => (
-                      <div key={t.title} style={styles.tabItem}>
-                        <span style={styles.tabTitle} title={t.title}>
-                          {t.title}
-                        </span>
-                        <span style={styles.tabSeconds}>{t.seconds}s</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+      <SourceList
+        title="Time per anger source"
+        rows={distractionSources}
+        unit="s"
+        color="#ff6b6b"
+        emptyText="No tab activity yet."
+        expanded={expanded}
+        toggle={toggle}
+        keyPrefix="distraction"
+      />
 
       <div style={styles.section}>
         <div style={styles.chartHeader}>
@@ -263,11 +225,7 @@ function App() {
             />
             <Tooltip
               cursor={{ fill: "rgba(255,255,255,0.05)" }}
-              contentStyle={{
-                background: "#1a1a2e",
-                border: "1px solid #33334d",
-                borderRadius: 8,
-              }}
+              contentStyle={styles.tooltip}
             />
             <Legend />
             <Bar
@@ -296,6 +254,203 @@ function App() {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      <WorkoutSection workouts={workouts} chartData={chartData} caption={view.caption} />
+    </div>
+  );
+}
+
+// Turns {"YouTube": {"Total seconds": 35, "Tabs": {...}}} into sorted rows for SourceList
+function toSourceRows(sources, totalKey, detailKey) {
+  return Object.entries(sources || {})
+    .filter(([, info]) => info && info[detailKey])
+    .map(([source, info]) => ({
+      source,
+      total: info[totalKey] || 0,
+      details: Object.entries(info[detailKey])
+        .map(([title, amount]) => ({ title, amount }))
+        .sort((a, b) => b.amount - a.amount),
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Expandable list of sources: a bar per total, with a breakdown underneath
+function SourceList({ title, rows, unit, color, emptyText, expanded, toggle, keyPrefix }) {
+  // Max value drives the bar widths. Math.max(1, ...) avoids dividing by zero.
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  return (
+    <div style={styles.section}>
+      <h2 style={styles.sectionTitle}>{title}</h2>
+      {rows.length === 0 ? (
+        <p style={styles.empty}>{emptyText}</p>
+      ) : (
+        rows.map((r) => {
+          const key = `${keyPrefix}:${r.source}`;
+          const isOpen = !!expanded[key];
+          return (
+            <div key={key} style={styles.sourceRow}>
+              {/* A <button> is the right element for "click to do something":
+                  it's keyboard-accessible by default. */}
+              <button onClick={() => toggle(key)} style={styles.sourceButton}>
+                <ChevronRight
+                  size={18}
+                  style={{
+                    ...styles.chevron,
+                    // Rotate the arrow when expanded. Pure CSS, no extra icon needed.
+                    transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+                  }}
+                />
+                <span style={styles.sourceName}>{r.source}</span>
+                <span style={styles.sourceSeconds}>
+                  {r.total}
+                  {unit}
+                </span>
+              </button>
+
+              <div style={styles.tabBarTrack}>
+                <div
+                  style={{
+                    ...styles.tabBarFill,
+                    background: color,
+                    width: `${(r.total / max) * 100}%`,
+                  }}
+                />
+              </div>
+
+              {/* `&&` short-circuit: if isOpen is false, nothing renders. */}
+              {isOpen && (
+                <div style={styles.tabList}>
+                  {r.details.map((d) => (
+                    <div key={d.title} style={styles.tabItem}>
+                      <span style={styles.tabTitle} title={d.title}>
+                        {d.title}
+                      </span>
+                      <span style={styles.tabSeconds}>
+                        {d.amount}
+                        {unit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+const formatWhen = (ms) =>
+  new Date(ms).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+const percent = (part, whole) => (whole ? `${Math.round((part / whole) * 100)}%` : "—");
+
+// Workout totals, reps per period (same interval as the activity chart),
+// per-exercise totals, and the latest sessions
+function WorkoutSection({ workouts, chartData, caption }) {
+  const hasWorkouts = workouts && workouts.total_sessions > 0;
+  const hasReps = chartData.some((p) => p.workout_reps > 0);
+  return (
+    <div style={styles.section}>
+      <h2 style={styles.sectionTitle}>
+        <Dumbbell size={20} style={styles.titleIcon} />
+        Workouts
+      </h2>
+      {!hasWorkouts ? (
+        <p style={styles.empty}>
+          No workouts yet. Right-click the pet and pick an exercise under Workout.
+        </p>
+      ) : (
+        <>
+          <div style={styles.statRow}>
+            <Stat label="Sessions" value={workouts.total_sessions} />
+            <Stat label="Reps" value={workouts.total_reps} />
+            <Stat
+              label="Good form"
+              value={percent(workouts.total_good_form_reps, workouts.total_reps)}
+            />
+          </div>
+
+          <h3 style={styles.subTitle}>Reps over time</h3>
+          <p style={{ ...styles.empty, marginBottom: 8 }}>
+            {hasReps ? caption : `No reps in this period (${caption.toLowerCase()}).`}
+          </p>
+          <ResponsiveContainer width="100%" height={160}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#33334d" vertical={false} />
+              <XAxis
+                dataKey="label"
+                stroke="#888"
+                tick={{ fontSize: 11 }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis stroke="#888" tick={{ fontSize: 11 }} allowDecimals={false} />
+              <Tooltip cursor={{ fill: "rgba(255,255,255,0.05)" }} contentStyle={styles.tooltip} />
+              <Bar
+                dataKey="workout_reps"
+                name="Reps"
+                fill="#4d96ff"
+                radius={[3, 3, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+
+          <h3 style={styles.subTitle}>By exercise</h3>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Exercise</th>
+                <th style={styles.thNum}>Sessions</th>
+                <th style={styles.thNum}>Reps</th>
+                <th style={styles.thNum}>Good form</th>
+                <th style={styles.thNum}>Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {workouts.exercises.map((e) => (
+                <tr key={e.exercise}>
+                  <td style={styles.td}>{e.exercise}</td>
+                  <td style={styles.tdNum}>{e.sessions}</td>
+                  <td style={styles.tdNum}>{e.reps}</td>
+                  <td style={styles.tdNum}>{percent(e.good_form_reps, e.reps)}</td>
+                  <td style={styles.tdNum}>{e.points}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3 style={styles.subTitle}>Recent sessions</h3>
+          <div style={{ ...styles.tabList, paddingLeft: 0, marginTop: 0 }}>
+            {workouts.recent.map((w) => (
+              <div key={w.time} style={styles.tabItem}>
+                <span style={styles.tabTitle}>
+                  {formatWhen(w.time)} · {w.exercise}
+                  {w.completed ? "" : " (stopped early)"}
+                </span>
+                <span style={styles.tabSeconds}>
+                  {w.reps}/{w.target_reps} reps · {w.good_form_reps} good form · +{w.points}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div style={styles.stat}>
+      <div style={styles.statValue}>{value}</div>
+      <div style={styles.statLabel}>{label}</div>
     </div>
   );
 }
@@ -360,6 +515,71 @@ const styles = {
   sectionTitle: {
     margin: "0 0 16px",
     fontSize: 20,
+  },
+  titleIcon: {
+    verticalAlign: "-3px",
+    marginRight: 8,
+  },
+  subTitle: {
+    margin: "24px 0 8px",
+    fontSize: 15,
+    opacity: 0.85,
+  },
+  statRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 12,
+  },
+  stat: {
+    background: "#1a1a2e",
+    borderRadius: 8,
+    padding: "12px 14px",
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 600,
+  },
+  statLabel: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    opacity: 0.7,
+    marginTop: 2,
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: 14,
+  },
+  th: {
+    textAlign: "left",
+    fontWeight: 600,
+    opacity: 0.7,
+    padding: "6px 8px 6px 0",
+    borderBottom: "1px solid #33334d",
+  },
+  thNum: {
+    textAlign: "right",
+    fontWeight: 600,
+    opacity: 0.7,
+    padding: "6px 0 6px 8px",
+    borderBottom: "1px solid #33334d",
+  },
+  td: {
+    textAlign: "left",
+    padding: "8px 8px 8px 0",
+    borderBottom: "1px solid #33334d",
+  },
+  tdNum: {
+    textAlign: "right",
+    padding: "8px 0 8px 8px",
+    borderBottom: "1px solid #33334d",
+    fontVariantNumeric: "tabular-nums",
+  },
+  tooltip: {
+    background: "#1a1a2e",
+    border: "1px solid #33334d",
+    borderRadius: 8,
   },
   empty: {
     opacity: 0.6,
